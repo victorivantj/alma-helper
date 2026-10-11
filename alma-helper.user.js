@@ -756,15 +756,23 @@
   const candadoAbierto = (row) =>
     row.querySelector(SEL.entradaCandado)?.getAttribute('md-svg-icon') === 'system-unlock';
 
-  function evolucionesPropiasDeHoy() {
+  // Evoluciones propias de hoy y de ayer. En la lista, las de hoy empiezan con la hora
+  // ("17:52 …") y las de días anteriores con la fecha ("09/10/2026 …").
+  function evolucionesPropias() {
     const yo = usuarioConectado();
+    const ayer = new Date();
+    ayer.setHours(0, 0, 0, 0);
+    ayer.setDate(ayer.getDate() - 1);
     return filasEntradas()
       .map((row) => {
         const texto = row.querySelector(SEL.entradaTexto)?.textContent.replace(/\s+/g, ' ').trim() || '';
+        if (!texto.toUpperCase().includes(yo) || !CONFIG.profesionalACopiar.test(texto) ||
+          !CONFIG.tipoEvolucionACopiar.test(texto.split(') -').pop())) return null;
         const hora = texto.match(/^(\d{2}:\d{2})\b/)?.[1];
-        const ok = hora && texto.toUpperCase().includes(yo) && CONFIG.profesionalACopiar.test(texto) &&
-          CONFIG.tipoEvolucionACopiar.test(texto.split(') -').pop());
-        return ok ? { row, hora, id: row.id } : null;
+        if (hora) return { row, id: row.id, dia: 'hoy', etiqueta: hora };
+        const fecha = texto.match(/^(\d{2}\/\d{2})\/\d{4}/);
+        if (fecha && parseFecha(texto)?.getTime() === ayer.getTime()) return { row, id: row.id, dia: 'ayer', etiqueta: fecha[1] };
+        return null;
       })
       .filter(Boolean);
   }
@@ -775,30 +783,43 @@
     if (!(await waitFor(() => filasEntradas().length, { timeout: 15000 })))
       throw new Error('no cargó la lista de registros');
     await limpiarFiltrosBusqueda();
-    const propias = evolucionesPropiasDeHoy();
+    const propias = evolucionesPropias();
     const abiertas = propias.filter((e) => candadoAbierto(e.row));
     if (!abiertas.length) {
-      toast(propias.length ? 'Tu evolución de hoy ya está bloqueada 🔒' : 'No hay una evolución tuya de hoy', false, 5000);
+      toast(propias.length ? 'Tus evoluciones de hoy y de ayer ya están bloqueadas 🔒' : 'No hay evoluciones tuyas de hoy ni de ayer', false, 5000);
       return;
     }
-    const horas = abiertas.map((e) => e.hora).join(', ');
-    const ok = await preguntar(
-      `¿Bloquear tu evolución de hoy (${horas})? Después no podrás editarla.`,
-      [{ valor: 'si', texto: `🔒 Bloquear (${horas})`, tecla: 'b' }]
+    const describir = (lista) => ['hoy', 'ayer']
+      .map((dia) => {
+        const del = lista.filter((e) => e.dia === dia);
+        return del.length ? `${dia} (${del.map((e) => e.etiqueta).join(', ')})` : null;
+      })
+      .filter(Boolean)
+      .join(' y ');
+    const hoy = abiertas.filter((e) => e.dia === 'hoy');
+    const ayer = abiertas.filter((e) => e.dia === 'ayer');
+    const opciones = [{ valor: 'todas', texto: `🔒 Bloquear ${describir(abiertas)}`, tecla: 'b' }];
+    if (hoy.length && ayer.length) {
+      opciones.push({ valor: 'hoy', texto: `Solo hoy (${hoy.map((e) => e.etiqueta).join(', ')})`, tecla: 'h' });
+      opciones.push({ valor: 'ayer', texto: `Solo ayer (${ayer[0].etiqueta})`, tecla: 'a' });
+    }
+    const resp = await preguntar(
+      `¿Bloquear tu evolución de ${describir(abiertas)}? Después no podrás editarla.`, opciones
     );
-    if (ok !== 'si') return;
-    for (const e of abiertas) {
+    if (!resp) return;
+    const elegidas = resp === 'todas' ? abiertas : abiertas.filter((e) => e.dia === resp);
+    for (const e of elegidas) {
       document.getElementById(e.id)?.querySelector(SEL.entradaCandado)?.click();
       const cerrado = await waitFor(() => {
         const row = document.getElementById(e.id);
         return row && !candadoAbierto(row);
       }, { timeout: 20000 });
       if (!cerrado) {
-        toast(`No se confirmó el bloqueo de las ${e.hora}: revisa si ALMA pide confirmación`, true, 8000);
+        toast(`No se confirmó el bloqueo de ${e.dia} (${e.etiqueta}): revisa si ALMA pide confirmación`, true, 8000);
         return;
       }
     }
-    toast(`Evolución bloqueada 🔒 (${horas})`, false, 5000);
+    toast(`Evolución bloqueada 🔒 (${describir(elegidas)})`, false, 5000);
   }
 
   // ---------------------------------------------------------------------------
@@ -1463,7 +1484,7 @@
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
       ['💊 Prescripción vigente', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra lo <b>vigente</b> y lo <b>por renovar</b> según la pantalla Medicamentos (misma regla de turnos que su resaltado). Un clic en su título la pliega o despliega, y se puede arrastrar. Si aún no se ha abierto Medicamentos de ese paciente en este turno, la pestaña dice <b>abrir Medicamentos</b> y con un clic la carga.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b> (incluido el turno de noche). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
-      medico && ['🔒 Cerrar evolución', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus evoluciones de hoy que sigan abiertas. Pide confirmación y luego ALMA pide la suya.</p>`],
+      medico && ['🔒 Cerrar evolución', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus evoluciones de hoy y de ayer que sigan abiertas. Si hay de ambos días, puedes elegir bloquear todas o solo las de un día. Pide confirmación y luego ALMA pide la suya.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
