@@ -1433,7 +1433,6 @@
         lista.replaceChildren();
       } else {
         head.innerHTML = `<span>💊 Prescripción vigente (${datos.vigentes.length})</span>` +
-          (datos.renovar.length ? `<span class="almah-meds-renovar">${datos.renovar.length} por renovar</span>` : '') +
           '<small></small><span class="almah-meds-flecha"></span>';
         head.querySelector('small').textContent = `Medicamentos ${datos.hora}`;
         head.title = 'Mostrar/ocultar · arrastrar para mover';
@@ -1827,8 +1826,6 @@
     #almah-meds-flot li.almah-renovar { color: #8a4500; }
     #almah-meds-flot li.almah-renovar::after { content: 'por renovar'; font: 700 9.5px/1.6 system-ui, sans-serif;
       color: #fff; background: #e37400; border-radius: 3px; padding: 0 4px; margin-left: 6px; vertical-align: middle; }
-    #almah-meds-flot .almah-meds-renovar { font: 700 10.5px/1.6 system-ui, sans-serif; background: #e37400;
-      border-radius: 3px; padding: 0 5px; }
     #almah-meds-flot.almah-collapsed ul { display: none; }
     #almah-meds-flot.almah-collapsed { opacity: .9; }
     #almah-meds-flot.almah-sin-datos .almah-meds-head { cursor: pointer; }
