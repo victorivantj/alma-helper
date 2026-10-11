@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         ALMA Helper (TrakCare)
 // @namespace    https://github.com/victorivantj/alma-helper
-// @version      0.16.1
-// @description  Atajos y mejoras para ALMA/TrakCare: notas médicas filtradas en un clic, menú flotante y atajos de teclado.
+// @version      0.16.2
+// @description  [BETA, en desarrollo] Atajos y mejoras para ALMA/TrakCare: evolucionar, notas por profesión, indicaciones frecuentes y medicamentos resaltados.
 // @author       Victor Tapia
 // @homepageURL  https://victorivantj.github.io/alma-helper/
 // @updateURL    https://victorivantj.github.io/alma-helper/alma-helper.user.js
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.16.1';
+  const VERSION = '0.16.2';
 
   // ---------------------------------------------------------------------------
   // Configuración
@@ -1326,7 +1326,7 @@
 
     const head = document.createElement('div');
     head.className = 'almah-head';
-    head.innerHTML = `<span class="almah-rayo">⚡</span><span class="almah-titulo">Asistente ALMA</span><span class="almah-estado"> (apagado)</span><span class="almah-version">v${VERSION}</span><span class="almah-punto" title="Hay una opción para esta pantalla"></span>`;
+    head.innerHTML = `<span class="almah-rayo">⚡</span><span class="almah-titulo">Asistente ALMA</span><span class="almah-estado"> (apagado)</span><span class="almah-version">v${VERSION} beta</span><span class="almah-punto" title="Hay una opción para esta pantalla"></span>`;
     head.title = `Mostrar/ocultar (${fmtAtajo(CONFIG.atajos.togglePanel)}) · arrastrar para mover`;
     hacerArrastrable(panel, head, togglePanel);
     panel.appendChild(head);

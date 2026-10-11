@@ -1,8 +1,11 @@
-# Asistente ALMA (ALMA Helper)
+# Asistente ALMA (ALMA Helper) — beta
 
 Userscript para **ALMA / TrakCare** (Servicio de Salud Coquimbo) que agrega atajos y mejoras
 para el trabajo clínico diario. Funciona con **Tampermonkey** o **Violentmonkey**.
 
+> 🧪 **Versión de prueba, en desarrollo (beta):** puede tener errores o dejar de funcionar si ALMA
+> cambia. Revisa siempre lo que agrega antes de guardar.
+>
 > El script **nunca guarda nada por ti**: toda indicación o nota se revisa y se guarda en
 > ALMA como siempre. No envía datos a ningún servidor externo.
 

@@ -34,9 +34,15 @@
   section { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
     padding: 20px; margin-bottom: 18px; }
   .paso { display: flex; gap: 14px; }
-  .num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--marca);
-    color: #fff; font-weight: 700; display: grid; place-items: center; }
-  .paso > div { flex: 1; min-width: 0; }
+  .num { flex: 0 0 32px; width: 32px; height: 32px; aspect-ratio: 1; align-self: flex-start;
+    border-radius: 50%; background: var(--marca); color: #fff; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center; }
+  .paso-cuerpo { flex: 1; min-width: 0; padding-top: 4px; }
+  .beta { display: inline-block; margin-top: 10px; margin-left: 6px; font-size: .85rem; font-weight: 700;
+    color: #fff; background: var(--aviso-borde); border-radius: 999px; padding: 2px 10px; }
+  .aviso-beta { background: var(--aviso); border: 1px solid var(--aviso-borde); border-left-width: 5px;
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+  .aviso-beta b:first-child { display: block; margin-bottom: 4px; }
   .extensiones { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 8px; }
   .ext { border: 1px solid var(--borde); border-radius: 10px; padding: 12px; }
   .ext b { display: block; margin-bottom: 6px; }
@@ -68,15 +74,23 @@
     <h1><span>⚡</span> Asistente ALMA</h1>
     <p class="sub">Atajos y mejoras para el registro clínico <b>ALMA / TrakCare</b> del Servicio de Salud Coquimbo:
       evolucionar en un clic, notas por profesión, indicaciones frecuentes y medicamentos resaltados.</p>
-    <span class="version" id="version">Userscript para Tampermonkey o Violentmonkey</span>
+    <span class="version" id="version">Userscript para Tampermonkey o Violentmonkey</span><span class="beta">🧪 En desarrollo (beta)</span>
   </header>
+
+  <div class="aviso-beta" role="note">
+    <b>🧪 Versión de prueba, en desarrollo</b>
+    Este script está en fase de pruebas: puede tener errores o dejar de funcionar si ALMA cambia.
+    Úsalo con precaución, <b>revisa siempre lo que agrega antes de guardar</b> y, ante cualquier duda,
+    apágalo con el interruptor del panel y trabaja con ALMA como siempre.
+    Si encuentras un problema, avísale al autor.
+  </div>
 
   <section>
     <h2>Instalación</h2>
 
     <div class="paso">
-      <div class="num">1</div>
-      <div>
+      <span class="num">1</span>
+      <div class="paso-cuerpo">
         <p><b>Instala una extensión de userscripts</b> en tu navegador (solo una vez):</p>
         <div class="extensiones">
           <div class="ext">
@@ -108,8 +122,8 @@
     <hr style="border: none; border-top: 1px solid var(--borde); margin: 18px 0;">
 
     <div class="paso">
-      <div class="num">2</div>
-      <div>
+      <span class="num">2</span>
+      <div class="paso-cuerpo">
         <p><b>Instala el Asistente ALMA</b>. La extensión abrirá una pantalla de instalación: presiona <i>Instalar</i>.</p>
         <p><a class="btn btn-grande" href="alma-helper.user.js">⚡ Instalar Asistente ALMA</a></p>
         <p style="font-size:.9rem;color:var(--suave)">Las nuevas versiones se instalan solas (la extensión revisa actualizaciones periódicamente).</p>
@@ -119,8 +133,8 @@
     <hr style="border: none; border-top: 1px solid var(--borde); margin: 18px 0;">
 
     <div class="paso">
-      <div class="num">3</div>
-      <div>
+      <span class="num">3</span>
+      <div class="paso-cuerpo">
         <p><b>Abre o recarga ALMA.</b> En el borde derecho aparece la pestaña <b>⚡ Asistente ALMA</b>; haz clic
           para ver las funciones y la <b>❓ Ayuda</b>.</p>
       </div>
@@ -157,7 +171,7 @@
   </section>
 
   <footer>
-    Herramienta no oficial, creada por Víctor Tapia · <a href="https://github.com/victorivantj/alma-helper">Código en GitHub</a>
+    Herramienta no oficial y en desarrollo (beta), creada por Víctor Tapia · <a href="https://github.com/victorivantj/alma-helper">Código en GitHub</a>
   </footer>
 </main>
 <script>
