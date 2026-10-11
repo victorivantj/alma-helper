@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ALMA Helper (TrakCare)
 // @namespace    https://github.com/victorivantj/alma-helper
-// @version      0.16.2
+// @version      0.16.3
 // @description  [BETA, en desarrollo] Atajos y mejoras para ALMA/TrakCare: evolucionar, notas por profesión, indicaciones frecuentes y medicamentos resaltados.
 // @author       Victor Tapia
 // @homepageURL  https://victorivantj.github.io/alma-helper/
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.16.2';
+  const VERSION = '0.16.3';
 
   // ---------------------------------------------------------------------------
   // Configuración
@@ -88,10 +88,15 @@
     ],
     // Evolucionar: tipo de entrada a crear (columna "Nuevo") y tipo de entrada
     // previa desde la que se copia el texto (la más reciente de un día anterior).
-    tipoEntradaEvolucion: /^\d+\.\s*evoluci/i,  // "2. Evolución Cuidados Críticos Adultos"
+    // Sirve para cualquier unidad: "2. Evolución Cuidados Críticos Adultos", "2. Evolución
+    // Medicina Interna", "Evolución Médica"… (el número inicial es opcional)
+    tipoEntradaEvolucion: /^(\d+\.\s*)?evoluci/i,
     tipoEvolucionACopiar: /evoluci|ingreso/i,  // "Evolución Medicina Interna", "Ingreso Cuidados Críticos…"
     profesionalACopiar: /\(M\u00e9dico/,       // "(Médico Cirujano)", "(Médico Becado)", "(Médico)"
-    accionNotasEvolucion: 'Notas de Evolución',
+    // Acción que abre el editor: "Notas de Evolución" (o variantes como "Notas de Evolución
+    // Médica"); si no existe, cualquier acción que mencione "Evolución"
+    accionNotasEvolucion: /^notas de evoluci/i,
+    accionNotasEvolucionRespaldo: /evoluci/i,
     // Indicaciones frecuentes: un menú desplegable por grupo (nombres exactos de ALMA).
     // Se busca por el nombre completo; un clic solo AGREGA a la lista de pendientes.
     indicacionesRapidas: [
@@ -593,10 +598,15 @@
       fila.querySelector(SEL.tipoEntradaNuevo).click();
     }
     const accion = await waitFor(
-      () => [...document.querySelectorAll(SEL.accionLink)].find((a) => a.textContent.trim() === CONFIG.accionNotasEvolucion),
+      () => {
+        const acciones = [...document.querySelectorAll(SEL.accionLink)].filter(isVisible);
+        const texto = (a) => a.textContent.trim();
+        return acciones.find((a) => CONFIG.accionNotasEvolucion.test(texto(a))) ||
+          acciones.find((a) => CONFIG.accionNotasEvolucionRespaldo.test(texto(a)));
+      },
       { timeout: 45000 } // crear la entrada tarda ~10 s
     );
-    if (!accion) throw new Error(`no apareció "${CONFIG.accionNotasEvolucion}"`);
+    if (!accion) throw new Error('no apareció la acción "Notas de Evolución"');
     const anterior = editorNotasVisible(); // puede quedar uno de una pantalla previa
     accion.click();
     const editor = await waitFor(() => {
