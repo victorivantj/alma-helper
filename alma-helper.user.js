@@ -1288,8 +1288,8 @@
 
   // Nombre corto para la ventana: la presentación se cambia por la vía de administración
   // (de la columna "Inf. adicional"), p. ej. "CLOPIDOGREL COMPRIMIDO RECUBIERTO 75 MG" →
-  // "CLOPIDOGREL ORAL 75 MG", "LORAZEPAM AMPOLLA 4 MG/2 ML" (intramuscular) → "LORAZEPAM IM 4 MG/2 ML".
-  const VIAS = [[/^ORAL/, 'ORAL'], [/^INTRAVENOSA/, 'IV'], [/^SUBCUTANEA/, 'SC'], [/^INTRAMUSCULAR/, 'IM']];
+  // "CLOPIDOGREL VO 75 MG", "LORAZEPAM AMPOLLA 4 MG/2 ML" (intramuscular) → "LORAZEPAM IM 4 MG/2 ML".
+  const VIAS = [[/^ORAL/, 'VO'], [/^INTRAVENOSA/, 'EV'], [/^SUBCUTANEA/, 'SC'], [/^INTRAMUSCULAR/, 'IM']];
   const PRESENTACION = /\b(FRASCO AMPOLLA|AMPOLLA|COMPRIMIDO|CM|JERING[AE] PRE-LLENADA|JERING[AE]|MATRAZ)\b/;
   function nombreCorto(row) {
     const nombre = nombreOrden(row);
