@@ -257,6 +257,11 @@
     pendienteRow: 'tr[id^="OEOrder_Entry_List_0-row-"]', // lista de indicaciones por guardar
     inicioFecha: '#OEOrder_Entry_0-item-OEORISttDat', // "Fecha de Inicio" para lo que se agregue
     inicioHora: '#OEOrder_Entry_0-item-OEORISttTim',
+    // Mapa de piso: nombre del paciente, fila de íconos e ícono de píldora (title = prescripción vigente)
+    bedNombre: '[id$="-patient-dataHeader-0-dataItem-0"]',
+    bedIconos: 'tc-icon-profile',
+    iconoPastilla: 'img.iconProfileImage[src*="pastilla"]',
+    bannerNombre: '#PAPerson_Banner-row-0-item-BANNERName2',
   };
 
   // Opciones del menú ••• del paciente (id = sufijo de tc_ActionMenu-menu-<id>)
@@ -1237,6 +1242,108 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Prescripción vigente: el título del ícono de píldora de cada cama se muestra en
+  // letra pequeña bajo los íconos y, dentro de la ficha del paciente, en una ventana
+  // flotante. Se recuerda solo en memoria (por nombre, mientras la pestaña siga abierta).
+  // ---------------------------------------------------------------------------
+  const prescripciones = new Map(); // nombre del paciente → { meds: [...], hora: 'HH:MM' }
+
+  function medsDeCama(bed) {
+    const img = bed.querySelector(SEL.iconoPastilla);
+    const txt = (img?.title || img?.alt || '').replace(/^[^:]*:\s*/, '');
+    return txt.split(';').map((m) => m.trim()).filter(Boolean);
+  }
+
+  function decorarPrescripcionCamas() {
+    const hora = new Date().toTimeString().slice(0, 5);
+    document.querySelectorAll(SEL.bed).forEach((bed) => {
+      const meds = medsDeCama(bed);
+      const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
+      if (nombre && meds.length) {
+        const previo = prescripciones.get(nombre);
+        if (previo?.meds.join(';') !== meds.join(';')) prescripciones.set(nombre, { meds, hora });
+      }
+      const fila = bed.querySelector(SEL.bedIconos)?.closest('.floorplanBedDataRow');
+      let caja = bed.querySelector('.almah-meds');
+      const clave = meds.join(';');
+      if (caja && caja.dataset.meds === clave && caja.previousElementSibling === fila) return;
+      caja?.remove();
+      if (!fila || !meds.length) return;
+      caja = document.createElement('div');
+      caja.className = 'almah-meds';
+      caja.dataset.meds = clave;
+      caja.textContent = `💊 ${meds.join(' · ')}`;
+      caja.title = `Prescripción vigente:\n${meds.join('\n')}`;
+      fila.after(caja);
+    });
+  }
+
+  let medsPlegado = false;
+  try { medsPlegado = localStorage.getItem('almah-meds-plegado') === '1'; } catch (e) { /* sin storage */ }
+
+  // Ventana flotante (abajo a la izquierda por defecto, arrastrable, se pliega con un clic)
+  function actualizarMedsFlotante() {
+    const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
+    const datos = nombre && prescripciones.get(nombre);
+    let win = document.getElementById('almah-meds-flot');
+    if (!datos) {
+      if (win) win.hidden = true;
+      return;
+    }
+    if (!win) {
+      win = document.createElement('div');
+      win.id = 'almah-meds-flot';
+      const head = document.createElement('div');
+      head.className = 'almah-meds-head';
+      head.title = 'Mostrar/ocultar · arrastrar para mover';
+      hacerArrastrable(win, head, () => {
+        medsPlegado = win.classList.toggle('almah-collapsed');
+        try { localStorage.setItem('almah-meds-plegado', medsPlegado ? '1' : '0'); } catch (e) { /* sin storage */ }
+        posicionMeds(win);
+      }, (w) => {
+        const r = w.getBoundingClientRect();
+        try { localStorage.setItem('almah-meds-pos', JSON.stringify({ top: r.top, left: r.left })); } catch (e) { /* sin storage */ }
+        posicionMeds(w);
+      });
+      const lista = document.createElement('ul');
+      win.append(head, lista);
+      document.body.appendChild(win);
+      window.addEventListener('resize', () => posicionMeds(win));
+    }
+    const clave = `${nombre}|${datos.meds.join(';')}`;
+    win.hidden = false;
+    win.classList.toggle('almah-collapsed', medsPlegado);
+    if (win.dataset.clave !== clave) {
+      win.dataset.clave = clave;
+      win.querySelector('.almah-meds-head').innerHTML =
+        `<span>💊 Prescripción vigente (${datos.meds.length})</span><small>mapa de camas ${datos.hora}</small><span class="almah-meds-flecha"></span>`;
+      const lista = win.querySelector('ul');
+      lista.replaceChildren(...datos.meds.map((m) => {
+        const li = document.createElement('li');
+        li.textContent = m;
+        return li;
+      }));
+    }
+    posicionMeds(win);
+  }
+
+  // Posición guardada { top, left } tras arrastrar; si no, pegada abajo a la izquierda
+  function posicionMeds(win) {
+    let pos = null;
+    try { pos = JSON.parse(localStorage.getItem('almah-meds-pos') || 'null'); } catch (e) { /* sin storage */ }
+    const r = win.getBoundingClientRect();
+    if (!pos) {
+      Object.assign(win.style, { left: '16px', top: 'auto', bottom: '0' });
+      return;
+    }
+    Object.assign(win.style, {
+      left: `${Math.max(0, Math.min(pos.left, window.innerWidth - r.width))}px`,
+      top: `${Math.max(0, Math.min(pos.top, window.innerHeight - r.height))}px`,
+      bottom: 'auto',
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Interruptor general: desactiva todas las funciones sin desinstalar el script
   // ---------------------------------------------------------------------------
   let activo = true;
@@ -1245,7 +1352,10 @@
   // Cada función trabaja solo en su pantalla, para no recorrer todo en cada cambio
   function decorarTodo() {
     const h = location.hash;
-    if (h.startsWith('#/Floorplan')) decorarCamas();
+    if (h.startsWith('#/Floorplan')) {
+      decorarCamas();
+      decorarPrescripcionCamas();
+    }
     if (document.querySelector(SEL.ordenRow)) resaltarMedicamentos();
     if (h.includes('OEOrder.EntryPortal')) {
       revisarPaciente6am();
@@ -1253,14 +1363,17 @@
       decorarIndicaciones();
     }
     actualizarPanelContextual();
+    actualizarMedsFlotante();
   }
 
   // Deja ALMA como sin el script: quita botones, barras, resaltados y filtros
   function limpiarTodo() {
-    document.querySelectorAll('.almah-bedbar, .almah-examenes, .almah-aviso, .almah-badge').forEach((e) => e.remove());
+    document.querySelectorAll('.almah-bedbar, .almah-meds, .almah-examenes, .almah-aviso, .almah-badge').forEach((e) => e.remove());
     document.querySelectorAll('.almah-oculto, .almah-filtrada').forEach((e) => e.classList.remove('almah-oculto', 'almah-filtrada'));
     document.querySelectorAll('[data-almah-med]').forEach((e) => e.removeAttribute('data-almah-med'));
     document.getElementById('almah-panel')?.classList.remove('almah-hay-contexto');
+    const flot = document.getElementById('almah-meds-flot');
+    if (flot) flot.hidden = true;
   }
 
   function setActivo(valor) {
@@ -1430,8 +1543,18 @@
     }
   }
 
-  // Arrastrar desde `asa`; un clic sin movimiento ejecuta `alClic`.
-  function hacerArrastrable(panel, asa, alClic) {
+  // Panel soltado cerca del borde derecho: queda pegado al borde (solo se guarda la altura)
+  function guardarPosicionPanel(panel) {
+    const nr = panel.getBoundingClientRect();
+    const pegado = window.innerWidth - nr.right < 80;
+    const pos = pegado ? { top: nr.top } : { top: nr.top, left: nr.left };
+    try { localStorage.setItem('almah-pos', JSON.stringify(pos)); } catch (err) { /* sin storage */ }
+    aplicarPosicion(panel);
+  }
+
+  // Arrastrar desde `asa`; un clic sin movimiento ejecuta `alClic` y al soltar tras
+  // moverlo se llama `alSoltar` (guarda la posición).
+  function hacerArrastrable(panel, asa, alClic, alSoltar = guardarPosicionPanel) {
     asa.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
@@ -1445,17 +1568,13 @@
         panel.style.left = `${ev.clientX - dx}px`;
         panel.style.top = `${ev.clientY - dy}px`;
         panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
       };
       const soltar = () => {
         document.removeEventListener('mousemove', mover);
         document.removeEventListener('mouseup', soltar);
         if (!movido) return alClic();
-        const nr = panel.getBoundingClientRect();
-        // Soltado cerca del borde derecho: queda pegado al borde (solo se guarda la altura)
-        const pegado = window.innerWidth - nr.right < 80;
-        const pos = pegado ? { top: nr.top } : { top: nr.top, left: nr.left };
-        try { localStorage.setItem('almah-pos', JSON.stringify(pos)); } catch (err) { /* sin storage */ }
-        aplicarPosicion(panel);
+        alSoltar(panel);
       };
       document.addEventListener('mousemove', mover);
       document.addEventListener('mouseup', soltar);
@@ -1564,6 +1683,21 @@
     .almah-btn { cursor: pointer; border: 1px solid #007067; background: #e8f4f3; color: #00554e;
       border-radius: 4px; padding: 2px 6px; font-size: 11px; }
     .almah-btn:hover { background: #007067; color: #fff; }
+    .almah-meds { font: 10px/1.25 system-ui, sans-serif; color: #444; padding: 1px 4px 2px;
+      overflow-wrap: anywhere; }
+    #almah-meds-flot { position: fixed; left: 16px; bottom: 0; z-index: 99998; max-width: 420px; min-width: 220px;
+      font: 12px/1.35 system-ui, sans-serif; background: #fff; border: 1px solid #007067; border-radius: 8px 8px 0 0;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2); overflow: hidden; }
+    #almah-meds-flot[hidden] { display: none; }
+    #almah-meds-flot .almah-meds-head { background: #007067; color: #fff; padding: 5px 10px; cursor: move;
+      user-select: none; display: flex; gap: 8px; align-items: baseline; font-weight: 700; }
+    #almah-meds-flot .almah-meds-head small { font-weight: 400; opacity: .8; font-size: 10.5px; margin-left: auto; }
+    #almah-meds-flot .almah-meds-flecha::after { content: '\\25BE'; }
+    #almah-meds-flot.almah-collapsed .almah-meds-flecha::after { content: '\\25B4'; }
+    #almah-meds-flot ul { margin: 0; padding: 6px 10px 8px 26px; max-height: 40vh; overflow-y: auto; color: #222; }
+    #almah-meds-flot li { margin: 1px 0; }
+    #almah-meds-flot.almah-collapsed ul { display: none; }
+    #almah-meds-flot.almah-collapsed { opacity: .9; }
     .almah-bedbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px 4px; }
     #almah-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
       background: #007067; color: #fff; padding: 8px 14px; border-radius: 6px; z-index: 100000;
