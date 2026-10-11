@@ -1432,8 +1432,7 @@
         head.title = 'Abre Medicamentos para cargar la prescripción vigente · arrastrar para mover';
         lista.replaceChildren();
       } else {
-        head.innerHTML = `<span>💊 Prescripción vigente (${datos.vigentes.length})</span>` +
-          '<small></small><span class="almah-meds-flecha"></span>';
+        head.innerHTML = '<span>💊 Prescripción vigente</span><small></small><span class="almah-meds-flecha"></span>';
         head.querySelector('small').textContent = `Medicamentos ${datos.hora}`;
         head.title = 'Mostrar/ocultar · arrastrar para mover';
         const item = (texto, clase) => {
