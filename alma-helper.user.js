@@ -94,8 +94,8 @@
     tipoEntradaEvolucion: /^(\d+\.\s*)?evoluci/i,
     tipoEvolucionACopiar: /evoluci|ingreso/i,  // "Evolución Medicina Interna", "Ingreso Cuidados Críticos…"
     profesionalACopiar: /\(M\u00e9dico/,       // "(Médico Cirujano)", "(Médico Becado)", "(Médico)"
-    // Si hay varias (p. ej. nota nocturna y evolución del día), se pregunta cuál copiar
-    // entre las más recientes de otros médicos
+    // Si hay varias notas (p. ej. nota nocturna y evolución, en la misma entrada o en
+    // entradas distintas), se pregunta cuál copiar entre las más recientes de otros médicos
     evolucionesAOfrecer: 4,
     // Acción que abre el editor: "Notas de Evolución" (o variantes como "Notas de Evolución
     // Médica"); si no existe, cualquier acción que mencione "Evolución"
@@ -544,6 +544,7 @@
   // Expande la fila (si hace falta) y devuelve el bloque con el texto de la nota
   // Si la entrada ya está expandida no se vuelve a hacer clic (la contraería). Si al
   // cargar solo trae ítems sin nota (p. ej. indicaciones), se devuelve null de inmediato.
+  // Una entrada puede tener varias notas (evolución + notas agregadas): ver notasDeFila.
   async function notaDeFila(row) {
     const anidada = row.nextElementSibling;
     const expandida = row.querySelector(SEL.entradaExpandir)?.getAttribute('aria-expanded') === 'true';
@@ -560,6 +561,12 @@
     return r && r.textContent.trim() ? r : null;
   }
 
+  // Todas las notas con texto de la entrada, en el orden en que ALMA las muestra
+  async function notasDeFila(row) {
+    if (!(await notaDeFila(row))) return [];
+    return [...row.nextElementSibling.querySelectorAll(SEL.notaHtml)].filter((n) => n.textContent.trim());
+  }
+
   // Devuelve { propiaHoy } si ya guardaste tu evolución de hoy, o { candidatas }: las
   // notas más recientes de otros médicos (la primera es la más nueva). También
   // `tipoHoy`: el tipo de tu entrada más reciente de hoy (de cualquier tipo), para saber
@@ -569,7 +576,7 @@
     let tipoHoy = null;
     const candidatas = [];
     for (const row of filasEntradas()) {
-      if (candidatas.length >= CONFIG.evolucionesAOfrecer) break;
+      if (candidatas.length >= CONFIG.evolucionesAOfrecer) break; // se completa la entrada en curso
       const texto = row.querySelector(SEL.entradaTexto)?.textContent.replace(/\s+/g, ' ').trim() || '';
       const tipo = texto.split(') -').pop().trim();
       if (!tipoHoy && /^\d{2}:\d{2}\b/.test(texto) && texto.toUpperCase().includes(yo)) tipoHoy = tipo;
@@ -585,14 +592,18 @@
         if (nota) return { propiaHoy: { hora, nota }, tipoHoy, candidatas };
         continue;
       }
-      // De otro médico, aunque sea de hoy (p. ej. turno de noche)
+      // De otro médico, aunque sea de hoy (p. ej. turno de noche). Cada nota de la
+      // entrada es una opción: la evolución y las notas agregadas (evento, nocturna).
       if (nota) {
-        candidatas.push({
-          html: nota.innerHTML,
+        const notas = await notasDeFila(row);
+        notas.forEach((n, i) => candidatas.push({
+          html: n.innerHTML,
           fecha: hora ? `hoy ${hora}` : fecha,
           autor: texto.replace(hora || fecha, '').split('(')[0].trim(),
-          extracto: nota.textContent.replace(/\s+/g, ' ').trim().slice(0, 70),
-        });
+          extracto: n.textContent.replace(/\s+/g, ' ').trim().slice(0, 80),
+          largo: n.textContent.trim().length,
+          posicion: notas.length > 1 ? `nota ${i + 1} de ${notas.length}` : '',
+        }));
       }
     }
     return { tipoHoy, candidatas };
@@ -603,10 +614,12 @@
   // Con una sola candidata la usa; con varias pregunta cuál copiar (null = cancelado)
   async function elegirEvolucion(candidatas) {
     if (candidatas.length === 1) return candidatas[0];
-    const valor = await preguntar('Hay varias notas médicas recientes. ¿Cuál copiar?',
+    const valor = await preguntar('Hay varias notas médicas recientes (la hora es la de la entrada). ¿Cuál copiar?',
       candidatas.map((c, i) => ({
         valor: i,
-        texto: `<b>${escaparHtml(c.fecha)}</b> · ${escaparHtml(c.autor)}<br><small>${escaparHtml(c.extracto)}…</small>`,
+        texto: `<b>${escaparHtml(c.fecha)}</b> · ${escaparHtml(c.autor)}` +
+          `${c.posicion ? ` · ${c.posicion}` : ''} · ${c.largo.toLocaleString('es-CL')} caracteres` +
+          `<br><small>${escaparHtml(c.extracto)}…</small>`,
         tecla: String(i + 1),
       })));
     return valor == null ? null : candidatas[valor];
@@ -1512,7 +1525,7 @@
       ['Panel y pestaña', `<p>La pestaña <b>⚡ Asistente ALMA</b> (borde derecho) abre este panel con un clic o con <kbd>${t('togglePanel')}</kbd>. Se puede arrastrar; si se suelta cerca del borde, queda pegada. El interruptor <b>Funciones</b> apaga todo el script sin desinstalarlo.</p>`],
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
       ['💊 Prescripción vigente', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra lo <b>vigente</b> y lo <b>por renovar</b> según la pantalla Medicamentos (misma regla de turnos que su resaltado). Un clic en su título la pliega o despliega, y se puede arrastrar. Si aún no se ha abierto Medicamentos de ese paciente en este turno, la pestaña dice <b>abrir Medicamentos</b> y con un clic la carga.</p>'],
-      medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora, el autor y el comienzo del texto. Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
+      medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
       medico && ['🔒 Cerrar evolución', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus evoluciones de hoy y de ayer que sigan abiertas. Si hay de ambos días, puedes elegir bloquear todas o solo las de un día. Pide confirmación y luego ALMA pide la suya.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
