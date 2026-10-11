@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ALMA Helper (TrakCare)
 // @namespace    https://github.com/victorivantj/alma-helper
-// @version      0.16.4
+// @version      0.16.5
 // @description  [BETA, en desarrollo] Atajos y mejoras para ALMA/TrakCare: evolucionar, notas por profesión, indicaciones frecuentes y medicamentos resaltados.
 // @author       Victor Tapia
 // @homepageURL  https://victorivantj.github.io/alma-helper/
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.16.4';
+  const VERSION = '0.16.5';
   const PAGINA_WEB = 'https://victorivantj.github.io/alma-helper/';
 
   // ---------------------------------------------------------------------------
@@ -1174,11 +1174,11 @@
       );
       if (!esMedico()) {
         bar.append(
-          mkBtn('🩹 Enfermería', 'Notas de enfermería de este paciente', () =>
+          mkBtn('🩹 Notas Enf.', 'Notas de enfermería de este paciente', () =>
             run('Notas de enfermería', () => notasDe('enfermeria', actionBtn))),
-          mkBtn('🏃 Kine', 'Notas de kinesiología de este paciente', () =>
+          mkBtn('🏃 Notas Kine', 'Notas de kinesiología de este paciente', () =>
             run('Notas de kinesiología', () => notasDe('kinesiologia', actionBtn))),
-          mkBtn('🧑‍⚕️ TENS', 'Notas TENS de este paciente', () =>
+          mkBtn('🧑‍⚕️ Notas TENS', 'Notas TENS de este paciente', () =>
             run('Notas TENS', () => notasDe('tens', actionBtn)))
         );
       }
