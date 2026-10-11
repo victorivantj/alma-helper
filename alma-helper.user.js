@@ -247,6 +247,8 @@
     ordenRow: 'tr[id^="OEOrdItem_ListEMR_"]',
     ordenTexto: '[id$="-item-TextRepresentation"]',
     ordenNombre: '[id$="-item-OrderName-link"]',
+    ordenFecha: '[id$="-item-DateOrdered"]', // fecha y hora de solicitud
+    ordenHora: '[id$="-item-TimeOrdered"]',
     ordenActualRow: 'tr[id^="OEOrdItem_ListEMR_0-row-"]', // primera tabla: Atención Actual
     ordenFarmacia: '[id$="-item-PharmacyStatus"]',
     // Resultados de "Búsqueda de Indicaciones"
@@ -798,11 +800,10 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Resaltado de indicaciones según fecha de término
+  // Resaltado de indicaciones según fecha de solicitud
   // ---------------------------------------------------------------------------
   const ESTADOS_MED = {
     vigente: 'Vigente',
-    hoy: 'Termina hoy',
     terminado: 'Terminado',
     suspendido: 'Suspendido',
   };
@@ -812,19 +813,17 @@
     return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
   }
 
-  function clasificarOrden(texto) {
+  // Vigente: solicitada hace menos de 24 h (la receta diaria se renueva cada día).
+  // No usa la fecha de término: antes de la receta del día, la de ayer "termina hoy".
+  function clasificarOrden(row) {
+    const texto = row.querySelector(SEL.ordenTexto)?.textContent || '';
     if (/Estado:\s*(Suspendido|Descontinuado|Anulado|Cancelado)|Descontinuado el:\s*\d/i.test(texto))
       return 'suspendido';
-    const termino = parseFecha(texto.match(/T\u00e9rmino:\s*(\S+)/)?.[1]);
-    if (!termino) return null;
-    const inicio = parseFecha(texto.match(/Inicio:\s*(\S+)/)?.[1]);
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    if (termino > hoy) return 'vigente';
-    // Termina hoy: si partió antes de hoy es la indicación del día anterior,
-    // ya reemplazada por la de hoy → terminada. Si partió hoy, se avisa.
-    if (termino.getTime() === hoy.getTime()) return inicio && inicio < hoy ? 'terminado' : 'hoy';
-    return 'terminado';
+    const fecha = parseFecha(row.querySelector(SEL.ordenFecha)?.textContent);
+    if (!fecha) return null;
+    const [h, m] = (row.querySelector(SEL.ordenHora)?.textContent.match(/(\d{1,2}):(\d{2})/) || [0, 0, 0]).slice(1);
+    fecha.setHours(+h, +m);
+    return Date.now() - fecha.getTime() < 24 * 3600 * 1000 ? 'vigente' : 'terminado';
   }
 
   let ocultarTerminados = false;
@@ -833,8 +832,7 @@
   function resaltarMedicamentos() {
     document.querySelectorAll(SEL.ordenRow).forEach((row) => {
       if (!/-row-\d+$/.test(row.id)) return;
-      const texto = row.querySelector(SEL.ordenTexto)?.textContent || '';
-      const estado = clasificarOrden(texto);
+      const estado = clasificarOrden(row);
       if (row.dataset.almahMed !== (estado || '')) {
         row.dataset.almahMed = estado || '';
         row.querySelector('.almah-badge')?.remove();
@@ -1304,7 +1302,7 @@
       const texto = r.querySelector(SEL.ordenTexto)?.textContent || '';
       const termino = parseFecha(texto.match(/Término:\s*(\S+)/)?.[1]);
       const farmacia = r.querySelector(SEL.ordenFarmacia)?.textContent || '';
-      if (!termino || termino < hoy || clasificarOrden(texto) === 'suspendido') return;
+      if (!termino || termino < hoy || clasificarOrden(r) === 'suspendido') return;
       if (/Ejecutado/i.test(texto.match(/Estado:\s*(\S+)/)?.[1] || '') || /Finalizado/i.test(farmacia)) return;
       const n = r.querySelector(SEL.ordenNombre)?.textContent.replace(/\s+/g, ' ').trim();
       if (n) meds.add(n);
@@ -1455,7 +1453,7 @@
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
-      ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> <span class="almah-badge almah-badge-terminado">Terminado</span> <span class="almah-badge almah-badge-suspendido">Suspendido</span>. <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
+      ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> (solicitada hace menos de 24 h) <span class="almah-badge almah-badge-terminado">Terminado</span> <span class="almah-badge almah-badge-suspendido">Suspendido</span>. <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
     ].filter(Boolean);
 
     const fondo = document.createElement('div');
@@ -1756,7 +1754,6 @@
     #almah-toast.almah-show { opacity: 1; }
     #almah-toast.almah-error { background: #b3261e; }
     tr[data-almah-med="vigente"] { background: #e6f4ea !important; box-shadow: inset 4px 0 #1e8e3e; }
-    tr[data-almah-med="hoy"] { background: #fff4e0 !important; box-shadow: inset 4px 0 #e37400; }
     tr[data-almah-med="terminado"] { opacity: .5; box-shadow: inset 4px 0 #9aa0a6; }
     tr[data-almah-med="suspendido"] { opacity: .5; box-shadow: inset 4px 0 #b3261e; }
     tr[data-almah-med="suspendido"] [id$="-item-OrderName-link"] { text-decoration: line-through; }
@@ -1764,7 +1761,6 @@
     .almah-badge { display: inline-block; font: 700 10px/1.6 system-ui, sans-serif; padding: 0 5px;
       border-radius: 3px; margin-right: 4px; color: #fff; vertical-align: middle; }
     .almah-badge-vigente { background: #1e8e3e; }
-    .almah-badge-hoy { background: #e37400; }
     .almah-badge-terminado { background: #80868b; }
     .almah-badge-suspendido { background: #b3261e; }
     .almah-aviso { cursor: pointer; font: 12px system-ui, sans-serif; color: #5f6368; background: #f1f3f4;
