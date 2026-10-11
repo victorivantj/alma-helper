@@ -27,7 +27,7 @@ Para publicar una versión, sube el número en `@version` y en `VERSION`, y haz 
 
 | Función | Atajo | Qué hace |
 |---|---|---|
-| 🩺 Evolucionar | Alt+E | Crea/abre tu evolución de hoy y copia la evolución más reciente de otro médico. Si ya guardaste la tuya, ofrece editarla o agregar una nota. |
+| 🩺 Evolucionar | Alt+E | Crea/abre tu evolución de hoy y copia la evolución más reciente de otro médico. Si hay varias notas médicas recientes (p. ej. nota nocturna y evolución), pregunta cuál copiar. Si ya guardaste la tuya, ofrece editarla o agregar una nota. |
 | 🔒 Cerrar evolución | Alt+B | Bloquea (candado) tus evoluciones de hoy y de ayer, con confirmación. |
 | 📝 Notas médicas | Alt+N | Registro Clínico → Búsqueda filtrada por médicos. |
 | 🩹 / 🏃 / 🧑‍⚕️ Notas por profesión | Alt+1 / 2 / 3 | Enfermería, kinesiología y TENS (perfil no médico). |
