@@ -94,6 +94,9 @@
     tipoEntradaEvolucion: /^(\d+\.\s*)?evoluci/i,
     tipoEvolucionACopiar: /evoluci|ingreso/i,  // "Evolución Medicina Interna", "Ingreso Cuidados Críticos…"
     profesionalACopiar: /\(M\u00e9dico/,       // "(Médico Cirujano)", "(Médico Becado)", "(Médico)"
+    // Si hay varias (p. ej. nota nocturna y evolución del día), se pregunta cuál copiar
+    // entre las más recientes de otros médicos
+    evolucionesAOfrecer: 4,
     // Acción que abre el editor: "Notas de Evolución" (o variantes como "Notas de Evolución
     // Médica"); si no existe, cualquier acción que mencione "Evolución"
     accionNotasEvolucion: /^notas de evoluci/i,
@@ -527,14 +530,14 @@
       throw new Error('no cargó la lista de registros');
     await limpiarFiltrosBusqueda();
     const res = await analizarListaEvoluciones();
-    if (res.propiaHoy || res.previa) return res;
+    if (res.propiaHoy || res.candidatas.length) return res;
 
     toast('No está en la primera página: filtrando por médicos…');
     await aplicarFiltroMedico();
     await sleep(1500);
     await waitFor(() => filasEntradas().length, { timeout: 15000 });
     const filtrada = await analizarListaEvoluciones();
-    if (filtrada.propiaHoy || filtrada.previa) return filtrada;
+    if (filtrada.propiaHoy || filtrada.candidatas.length) return filtrada;
     throw new Error('no se encontró una evolución médica anterior');
   }
 
@@ -557,12 +560,16 @@
     return r && r.textContent.trim() ? r : null;
   }
 
-  // Devuelve también `tipoHoy`: el tipo de la entrada propia más reciente de hoy (de
-  // cualquier tipo), para saber qué hay en el panel "Actual".
+  // Devuelve { propiaHoy } si ya guardaste tu evolución de hoy, o { candidatas }: las
+  // notas más recientes de otros médicos (la primera es la más nueva). También
+  // `tipoHoy`: el tipo de tu entrada más reciente de hoy (de cualquier tipo), para saber
+  // qué hay en el panel "Actual".
   async function analizarListaEvoluciones() {
     const yo = usuarioConectado();
     let tipoHoy = null;
+    const candidatas = [];
     for (const row of filasEntradas()) {
+      if (candidatas.length >= CONFIG.evolucionesAOfrecer) break;
       const texto = row.querySelector(SEL.entradaTexto)?.textContent.replace(/\s+/g, ' ').trim() || '';
       const tipo = texto.split(') -').pop().trim();
       if (!tipoHoy && /^\d{2}:\d{2}\b/.test(texto) && texto.toUpperCase().includes(yo)) tipoHoy = tipo;
@@ -575,17 +582,34 @@
       if (propia) {
         // Evolución propia de hoy: si ya tiene nota guardada no se copia nada;
         // si está vacía se sigue buscando la de otro médico.
-        if (nota) return { propiaHoy: { hora, nota }, tipoHoy };
+        if (nota) return { propiaHoy: { hora, nota }, tipoHoy, candidatas };
         continue;
       }
-      // La más reciente de otro médico, aunque sea de hoy (p. ej. turno de noche)
+      // De otro médico, aunque sea de hoy (p. ej. turno de noche)
       if (nota) {
-        const cuando = hora ? `hoy ${hora}` : fecha;
-        const autor = texto.replace(hora || fecha, '').split('(')[0].trim();
-        return { previa: { html: nota.innerHTML, fecha: cuando, autor }, tipoHoy };
+        candidatas.push({
+          html: nota.innerHTML,
+          fecha: hora ? `hoy ${hora}` : fecha,
+          autor: texto.replace(hora || fecha, '').split('(')[0].trim(),
+          extracto: nota.textContent.replace(/\s+/g, ' ').trim().slice(0, 70),
+        });
       }
     }
-    return { tipoHoy };
+    return { tipoHoy, candidatas };
+  }
+
+  const escaparHtml = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+  // Con una sola candidata la usa; con varias pregunta cuál copiar (null = cancelado)
+  async function elegirEvolucion(candidatas) {
+    if (candidatas.length === 1) return candidatas[0];
+    const valor = await preguntar('Hay varias notas médicas recientes. ¿Cuál copiar?',
+      candidatas.map((c, i) => ({
+        valor: i,
+        texto: `<b>${escaparHtml(c.fecha)}</b> · ${escaparHtml(c.autor)}<br><small>${escaparHtml(c.extracto)}…</small>`,
+        tecla: String(i + 1),
+      })));
+    return valor == null ? null : candidatas[valor];
   }
 
   // Si ya existe la entrada de hoy, el panel "Actual" está habilitado y muestra sus
@@ -721,7 +745,7 @@
   async function evolucionDelDia(actionBtn) {
     if (actionBtn) await abrirRegistroClinico(actionBtn);
     toast('Buscando la evolución anterior…');
-    const { propiaHoy, previa, tipoHoy } = await buscarEvolucionAnterior();
+    const { propiaHoy, candidatas, tipoHoy } = await buscarEvolucionAnterior();
     if (propiaHoy) {
       const opcion = await preguntar(`Ya guardaste tu evolución de hoy (${propiaHoy.hora}). ¿Qué quieres hacer?`, [
         { valor: 'editar', texto: `✏️ Editar mi evolución de las ${propiaHoy.hora}`, tecla: 'e' },
@@ -731,6 +755,8 @@
       else if (opcion === 'agregar') (await abrirNotaEvolucion()).focus();
       return;
     }
+    const previa = await elegirEvolucion(candidatas);
+    if (!previa) return;
     // "Actual" es tu entrada de hoy: si no es una Evolución (Ingreso, Evaluación,
     // Acciones adicionales…) se pregunta antes de pegar ahí.
     let nueva = false;
@@ -1486,7 +1512,7 @@
       ['Panel y pestaña', `<p>La pestaña <b>⚡ Asistente ALMA</b> (borde derecho) abre este panel con un clic o con <kbd>${t('togglePanel')}</kbd>. Se puede arrastrar; si se suelta cerca del borde, queda pegada. El interruptor <b>Funciones</b> apaga todo el script sin desinstalarlo.</p>`],
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
       ['💊 Prescripción vigente', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra lo <b>vigente</b> y lo <b>por renovar</b> según la pantalla Medicamentos (misma regla de turnos que su resaltado). Un clic en su título la pliega o despliega, y se puede arrastrar. Si aún no se ha abierto Medicamentos de ese paciente en este turno, la pestaña dice <b>abrir Medicamentos</b> y con un clic la carga.</p>'],
-      medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b> (incluido el turno de noche). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
+      medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora, el autor y el comienzo del texto. Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
       medico && ['🔒 Cerrar evolución', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus evoluciones de hoy y de ayer que sigan abiertas. Si hay de ambos días, puedes elegir bloquear todas o solo las de un día. Pide confirmación y luego ALMA pide la suya.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
@@ -1824,6 +1850,8 @@
     #almah-dialogo p { margin: 0 0 4px; font-weight: 600; color: #333; }
     #almah-dialogo .almah-btn { display: flex; justify-content: space-between; gap: 12px;
       padding: 8px 10px; font-size: 14px; text-align: left; }
+    #almah-dialogo .almah-btn small { display: block; font-weight: 400; color: #5f6368; margin-top: 2px; }
+    #almah-dialogo .almah-btn:hover small { color: #e8f4f3; }
     #almah-dialogo .almah-cancelar { justify-content: center; background: #f1f3f4; border-color: #9aa0a6; color: #333; }
   `;
   const style = document.createElement('style');
