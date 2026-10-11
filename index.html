@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asistente ALMA</title>
+<meta name="description" content="Userscript con atajos y mejoras para ALMA / TrakCare (Servicio de Salud Coquimbo).">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<style>
+  :root {
+    --fondo: #f6f8f8; --tarjeta: #ffffff; --texto: #1f2a2a; --suave: #5b6b6b;
+    --marca: #007067; --marca-osc: #00554e; --marca-claro: #e3f2f0; --borde: #dbe5e4;
+    --aviso: #fff4e0; --aviso-borde: #e37400;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #101716; --tarjeta: #18211f; --texto: #e4ecea; --suave: #9fb1ae;
+      --marca: #3fb5a8; --marca-osc: #7fd3c9; --marca-claro: #1d2f2c; --borde: #2a3836;
+      --aviso: #2e2414; --aviso-borde: #e39a3b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fondo); color: var(--texto);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { text-align: center; margin-bottom: 28px; }
+  h1 { font-size: 2rem; margin: 0 0 6px; }
+  h1 span { color: var(--marca); }
+  h2 { font-size: 1.25rem; margin: 0 0 12px; color: var(--marca-osc); }
+  p { margin: 0 0 10px; }
+  .sub { color: var(--suave); margin: 0 auto; max-width: 600px; }
+  .version { display: inline-block; margin-top: 10px; font-size: .85rem; color: var(--suave);
+    border: 1px solid var(--borde); border-radius: 999px; padding: 2px 10px; }
+  section { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+    padding: 20px; margin-bottom: 18px; }
+  .paso { display: flex; gap: 14px; }
+  .num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--marca);
+    color: #fff; font-weight: 700; display: grid; place-items: center; }
+  .paso > div { flex: 1; min-width: 0; }
+  .extensiones { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 8px; }
+  .ext { border: 1px solid var(--borde); border-radius: 10px; padding: 12px; }
+  .ext b { display: block; margin-bottom: 6px; }
+  .enlaces { display: flex; flex-wrap: wrap; gap: 6px; }
+  a { color: var(--marca); }
+  .btn { display: inline-block; text-decoration: none; padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--marca); color: var(--marca-osc); background: var(--marca-claro); font-size: .9rem; }
+  .btn:hover { background: var(--marca); color: #fff; }
+  .btn-grande { font-size: 1.1rem; font-weight: 700; padding: 12px 22px; background: var(--marca);
+    color: #fff; border-color: var(--marca); }
+  .btn-grande:hover { background: var(--marca-osc); border-color: var(--marca-osc); }
+  .aviso { background: var(--aviso); border-left: 4px solid var(--aviso-borde); border-radius: 6px;
+    padding: 10px 12px; margin-top: 10px; font-size: .92rem; }
+  code, kbd { font: .85em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--marca-claro);
+    border: 1px solid var(--borde); border-radius: 4px; padding: 1px 5px; }
+  .tabla { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--borde); vertical-align: top; }
+  th { color: var(--suave); font-weight: 600; }
+  td:nth-child(2) { white-space: nowrap; }
+  ul { margin: 6px 0 0; padding-left: 20px; }
+  footer { text-align: center; color: var(--suave); font-size: .85rem; margin-top: 24px; }
+  @media (max-width: 520px) { h1 { font-size: 1.6rem; } section { padding: 16px; } .paso { gap: 10px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1><span>⚡</span> Asistente ALMA</h1>
+    <p class="sub">Atajos y mejoras para el registro clínico <b>ALMA / TrakCare</b> del Servicio de Salud Coquimbo:
+      evolucionar en un clic, notas por profesión, indicaciones frecuentes y medicamentos resaltados.</p>
+    <span class="version" id="version">Userscript para Tampermonkey o Violentmonkey</span>
+  </header>
+
+  <section>
+    <h2>Instalación</h2>
+
+    <div class="paso">
+      <div class="num">1</div>
+      <div>
+        <p><b>Instala una extensión de userscripts</b> en tu navegador (solo una vez):</p>
+        <div class="extensiones">
+          <div class="ext">
+            <b>Tampermonkey <small>(recomendada)</small></b>
+            <div class="enlaces">
+              <a class="btn" href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" rel="noopener">Chrome</a>
+              <a class="btn" href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd" target="_blank" rel="noopener">Edge</a>
+              <a class="btn" href="https://addons.mozilla.org/firefox/addon/tampermonkey/" target="_blank" rel="noopener">Firefox</a>
+              <a class="btn" href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Sitio oficial</a>
+            </div>
+          </div>
+          <div class="ext">
+            <b>Violentmonkey <small>(código abierto)</small></b>
+            <div class="enlaces">
+              <a class="btn" href="https://addons.mozilla.org/firefox/addon/violentmonkey/" target="_blank" rel="noopener">Firefox</a>
+              <a class="btn" href="https://microsoftedge.microsoft.com/addons/detail/violentmonkey/eeagobfjdenkkddmbclomhiblgggliao" target="_blank" rel="noopener">Edge</a>
+              <a class="btn" href="https://violentmonkey.github.io/" target="_blank" rel="noopener">Sitio oficial</a>
+            </div>
+          </div>
+        </div>
+        <div class="aviso">
+          <b>En Chrome:</b> abre <code>chrome://extensions</code>, entra a <i>Detalles</i> de Tampermonkey y activa
+          <b>«Permitir scripts de usuario»</b> (en versiones antiguas de Chrome, activa el <i>Modo de desarrollador</i>).
+          Sin esto, Chrome bloquea el script. Violentmonkey ya no está disponible para Chrome: usa Tampermonkey.
+        </div>
+      </div>
+    </div>
+
+    <hr style="border: none; border-top: 1px solid var(--borde); margin: 18px 0;">
+
+    <div class="paso">
+      <div class="num">2</div>
+      <div>
+        <p><b>Instala el Asistente ALMA</b>. La extensión abrirá una pantalla de instalación: presiona <i>Instalar</i>.</p>
+        <p><a class="btn btn-grande" href="alma-helper.user.js">⚡ Instalar Asistente ALMA</a></p>
+        <p style="font-size:.9rem;color:var(--suave)">Las nuevas versiones se instalan solas (la extensión revisa actualizaciones periódicamente).</p>
+      </div>
+    </div>
+
+    <hr style="border: none; border-top: 1px solid var(--borde); margin: 18px 0;">
+
+    <div class="paso">
+      <div class="num">3</div>
+      <div>
+        <p><b>Abre o recarga ALMA.</b> En el borde derecho aparece la pestaña <b>⚡ Asistente ALMA</b>; haz clic
+          para ver las funciones y la <b>❓ Ayuda</b>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Funciones</h2>
+    <div class="tabla">
+      <table>
+        <thead><tr><th>Función</th><th>Atajo</th><th>Qué hace</th></tr></thead>
+        <tbody>
+          <tr><td>🩺 Evolucionar</td><td><kbd>Alt+E</kbd></td><td>Crea o abre tu evolución de hoy y copia la evolución más reciente de otro médico. Si ya guardaste la tuya, ofrece editarla o agregar una nota.</td></tr>
+          <tr><td>🔒 Cerrar evolución</td><td><kbd>Alt+B</kbd></td><td>Bloquea tus evoluciones de hoy, con confirmación.</td></tr>
+          <tr><td>📝 Notas médicas</td><td><kbd>Alt+N</kbd></td><td>Registro Clínico filtrado por médicos.</td></tr>
+          <tr><td>🩹 🏃 🧑‍⚕️ Notas por profesión</td><td><kbd>Alt+1/2/3</kbd></td><td>Enfermería, kinesiología y TENS (cuentas no médicas).</td></tr>
+          <tr><td>✍️ Indicaciones</td><td><kbd>Alt+I</kbd></td><td>Reposo, régimen, fármacos y exámenes frecuentes en un clic; ⏰ exámenes a las 6 AM; oculta ítems poco usados en la búsqueda.</td></tr>
+          <tr><td>💊 Medicamentos</td><td><kbd>Alt+M</kbd></td><td>Resalta indicaciones vigentes, terminadas y suspendidas; opción para ocultar las terminadas (<kbd>Alt+T</kbd>).</td></tr>
+          <tr><td>⚡ Panel</td><td><kbd>Alt+A</kbd></td><td>Muestra u oculta el panel. Incluye interruptor para apagar el script y ayuda.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:10px;font-size:.92rem;color:var(--suave)">Cada cama del mapa de piso muestra además botones de acceso directo. Las funciones se adaptan al perfil del usuario (médico u otro profesional).</p>
+  </section>
+
+  <section>
+    <h2>Importante</h2>
+    <ul>
+      <li>El script <b>nunca guarda nada por ti</b>: toda indicación o nota se revisa y se guarda en ALMA como siempre.</li>
+      <li>Los fármacos se agregan con los valores por defecto de ALMA: <b>ajusta dosis y frecuencia</b> antes de guardar.</li>
+      <li>No envía datos a ningún servidor: todo ocurre en tu navegador.</li>
+      <li>Puedes apagarlo en cualquier momento con el interruptor del panel, sin desinstalarlo.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Herramienta no oficial, creada por Víctor Tapia · <a href="https://github.com/victorivantj/alma-helper">Código en GitHub</a>
+  </footer>
+</main>
+<script>
+  // Muestra la versión publicada leyendo el encabezado del script
+  fetch('alma-helper.user.js', { cache: 'no-store' })
+    .then((r) => r.text())
+    .then((t) => {
+      const v = (t.match(/@version\s+(\S+)/) || [])[1];
+      if (v) document.getElementById('version').textContent = 'Versión ' + v;
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>

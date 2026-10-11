@@ -1,9 +1,12 @@
 // ==UserScript==
 // @name         ALMA Helper (TrakCare)
 // @namespace    https://github.com/victorivantj/alma-helper
-// @version      0.16.0
+// @version      0.16.1
 // @description  Atajos y mejoras para ALMA/TrakCare: notas médicas filtradas en un clic, menú flotante y atajos de teclado.
 // @author       Victor Tapia
+// @homepageURL  https://victorivantj.github.io/alma-helper/
+// @updateURL    https://victorivantj.github.io/alma-helper/alma-helper.user.js
+// @downloadURL  https://victorivantj.github.io/alma-helper/alma-helper.user.js
 // @match        https://alma.trakcare.cl/sscq/*
 // @match        https://almatrain.trakcare.cl/sscqtrain/*
 // @run-at       document-idle
@@ -13,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.16.0';
+  const VERSION = '0.16.1';
 
   // ---------------------------------------------------------------------------
   // Configuración

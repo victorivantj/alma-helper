@@ -8,15 +8,17 @@ para el trabajo clínico diario. Funciona con **Tampermonkey** o **Violentmonkey
 
 ## Instalación
 
-1. Instala [Tampermonkey](https://www.tampermonkey.net/) en tu navegador.
+**Página de instalación: https://victorivantj.github.io/alma-helper/**
+
+1. Instala [Tampermonkey](https://www.tampermonkey.net/) o [Violentmonkey](https://violentmonkey.github.io/).
    - En Chrome: `chrome://extensions` → Tampermonkey → *Detalles* → activa
      **"Permitir scripts de usuario"** (o el *Modo de desarrollador* en Chrome < 138).
-2. En Tampermonkey: *Crear un nuevo script*, pega el contenido de
-   [`alma-helper.user.js`](alma-helper.user.js) y guarda.
+2. Abre [el enlace de instalación](https://victorivantj.github.io/alma-helper/alma-helper.user.js)
+   y presiona *Instalar*.
 3. Recarga ALMA. En el borde derecho aparece la pestaña **⚡ Asistente ALMA**.
 
-Para actualizar, reemplaza el contenido del script por la nueva versión. El panel muestra
-la versión instalada.
+Las nuevas versiones se instalan solas: la extensión revisa `@updateURL` periódicamente.
+Para publicar una versión, sube el número en `@version` y en `VERSION`, y haz `git push`.
 
 ## Funciones
 
