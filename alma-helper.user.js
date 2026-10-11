@@ -242,6 +242,7 @@
     accionLink: '[id^="MREncEntryActions_List_0-row-"][id$="-item-Desc-link"]',
     editorNotas: 'NOTNotesHTMLRichText', // instancia CKEditor
     chartMenuCaption: '[id^="tc_Chart-menu-"][id$="-caption"]',
+    chartMenuSeleccionado: '.chartMenuItem.chartMenuSelected',
     // Filas de las listas de indicaciones (Medicamentos - Atención Actual / Todas las Atenciones)
     ordenRow: 'tr[id^="OEOrdItem_ListEMR_"]',
     ordenTexto: '[id$="-item-TextRepresentation"]',
@@ -1290,6 +1291,9 @@
   // ícono de píldora, que sigue mostrando la indicación de ayer hasta que se haga la de hoy
   // (el resaltado verde/gris de esa pantalla es más estricto).
   function leerPrescripcionMedicamentos() {
+    // Otras pantallas (p. ej. RCE PRINCIPAL) usan la misma tabla con otro contenido
+    const pestana = document.querySelector(`${SEL.chartMenuSeleccionado} ${SEL.chartMenuCaption}`);
+    if (pestana?.textContent.trim() !== 'Medicamentos') return;
     const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
     const filas = [...document.querySelectorAll(SEL.ordenActualRow)].filter((r) => /-row-\d+$/.test(r.id));
     if (!nombre || !filas.length) return;
