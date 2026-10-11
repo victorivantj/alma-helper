@@ -32,7 +32,8 @@ Para publicar una versión, sube el número en `@version` y en `VERSION`, y haz 
 | 📝 Notas médicas | Alt+N | Registro Clínico → Búsqueda filtrada por médicos. |
 | 🩹 / 🏃 / 🧑‍⚕️ Notas por profesión | Alt+1 / 2 / 3 | Enfermería, kinesiología y TENS (perfil no médico). |
 | ✍️ Indicaciones | Alt+I | Abre Indicaciones. Barra con Reposo, Régimen, Fármacos, Lab diario, Coronario, Otros exámenes y ⏰ 6 AM (solo perfil médico). Oculta ítems poco usados en la búsqueda. |
-| 💊 Medicamentos | Alt+M | Resalta indicaciones vigentes, terminadas y suspendidas. |
+| 💊 Medicamentos | Alt+M | Resalta cada indicación según el turno en que se solicitó (los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo): vigente (turno actual), por renovar (turno anterior, aún no indicada de nuevo), terminada o suspendida. |
+| 💊 Prescripción vigente | — | Ventana flotante en la ficha del paciente con lo vigente y lo por renovar según Medicamentos, con nombres abreviados por vía (VO, EV, SC, IM). Caduca al cambiar el turno. |
 | 👁️ Ocultar terminados | Alt+T | Solo en Medicamentos. |
 | Panel | Alt+A | Muestra/oculta el panel. Incluye interruptor para apagar el script y ❓ Ayuda. |
 
