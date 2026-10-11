@@ -223,6 +223,7 @@
     panelNuevo: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-entry-add',
     panelActual: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-entry-current',
     usuarioActual: '#tc_NavBar-misc-profileToggle', // nombre del usuario (respaldo)
+    grupoSeguridad: '#tc_NavBar-profilePanel-securityGroup', // p. ej. "CLXX.IP.Médico Cuidados Críticos"
     episodioPaciente: '[id$="-item-BANNERPAADMADMNo"]', // N° de episodio del banner
     limpiarBusqueda: '#MREncEntry_FindList_0-button-ClearAllFields',
     fechaDesde: '#MREncEntry_FindList_0-item-DateFrom',
@@ -473,9 +474,13 @@
   // ---------------------------------------------------------------------------
   // Perfil del usuario (Grupo de Seguridad): médico u otro profesional
   // ---------------------------------------------------------------------------
-  // Sin dato (p. ej. pantalla de login) se asume médico, el comportamiento original.
+  // Se lee primero el grupo que muestra el menú de perfil (lo que ve el usuario); los datos
+  // de la sesión pueden quedar con el grupo de quien usó antes la pestaña. Sin dato
+  // (p. ej. pantalla de login) se asume médico, el comportamiento original.
+  const grupoSeguridad = () =>
+    document.querySelector(SEL.grupoSeguridad)?.textContent.trim() || window.sessionData?.logonData?.groupDesc || '';
   function perfilActual() {
-    const grupo = window.sessionData?.logonData?.groupDesc || '';
+    const grupo = grupoSeguridad();
     return !grupo || CONFIG.perfilMedico.test(grupo) ? 'medico' : 'otro';
   }
   const esMedico = () => perfilActual() === 'medico';
@@ -1473,9 +1478,11 @@
     const caja = document.createElement('div');
     caja.className = 'almah-dialogo-caja almah-ayuda';
     caja.innerHTML = `<p>⚡ Asistente ALMA v${VERSION} · perfil ${medico ? 'médico' : 'otros profesionales'}</p>` +
+      '<small class="almah-grupo"></small>' +
       secciones.map(([titulo, html]) => `<h4>${titulo}</h4>${html}`).join('') +
       '<small>El script no guarda nada por ti: toda indicación o nota se revisa y se guarda en ALMA como siempre.</small>' +
       `<p class="almah-ayuda-web">🌐 Instalación, novedades y más información: <a href="${PAGINA_WEB}" target="_blank" rel="noopener">${PAGINA_WEB.replace(/^https:\/\//, '')}</a></p>`;
+    caja.querySelector('.almah-grupo').textContent = `Grupo de seguridad: ${grupoSeguridad() || '(no detectado)'}`;
     const cerrar = () => {
       document.removeEventListener('keydown', teclas, true);
       fondo.remove();
@@ -1714,6 +1721,7 @@
     #almah-dialogo .almah-ayuda h4 { margin: 8px 0 0; font-size: 13px; color: #007067; }
     #almah-dialogo .almah-ayuda p { font-weight: 400; margin: 2px 0; color: #333; }
     #almah-dialogo .almah-ayuda > p:first-child { font-weight: 700; }
+    #almah-dialogo .almah-ayuda .almah-grupo { margin: 0; }
     #almah-dialogo .almah-ayuda small { color: #5f6368; margin: 8px 0 4px; }
     #almah-dialogo .almah-ayuda .almah-ayuda-web { font-size: 12.5px; margin: 0 0 6px; }
     #almah-dialogo .almah-ayuda a { color: #007067; font-weight: 600; }
