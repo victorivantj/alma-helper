@@ -804,7 +804,10 @@
       opciones.push({ valor: 'ayer', texto: `Solo ayer (${ayer[0].etiqueta})`, tecla: 'a' });
     }
     const resp = await preguntar(
-      `¿Bloquear tu evolución de ${describir(abiertas)}? Después no podrás editarla.`, opciones
+      abiertas.length > 1
+        ? `¿Bloquear tus evoluciones de ${describir(abiertas)}? Después no podrás editarlas.`
+        : `¿Bloquear tu evolución de ${describir(abiertas)}? Después no podrás editarla.`,
+      opciones
     );
     if (!resp) return;
     const elegidas = resp === 'todas' ? abiertas : abiertas.filter((e) => e.dia === resp);
@@ -819,7 +822,7 @@
         return;
       }
     }
-    toast(`Evolución bloqueada 🔒 (${describir(elegidas)})`, false, 5000);
+    toast(`${elegidas.length > 1 ? 'Evoluciones bloqueadas' : 'Evolución bloqueada'} 🔒 (${describir(elegidas)})`, false, 5000);
   }
 
   // ---------------------------------------------------------------------------
