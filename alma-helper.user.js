@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ALMA Helper (TrakCare)
 // @namespace    https://github.com/victorivantj/alma-helper
-// @version      0.16.3
+// @version      0.16.4
 // @description  [BETA, en desarrollo] Atajos y mejoras para ALMA/TrakCare: evolucionar, notas por profesión, indicaciones frecuentes y medicamentos resaltados.
 // @author       Victor Tapia
 // @homepageURL  https://victorivantj.github.io/alma-helper/
@@ -16,7 +16,8 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.16.3';
+  const VERSION = '0.16.4';
+  const PAGINA_WEB = 'https://victorivantj.github.io/alma-helper/';
 
   // ---------------------------------------------------------------------------
   // Configuración
@@ -1301,7 +1302,8 @@
     caja.className = 'almah-dialogo-caja almah-ayuda';
     caja.innerHTML = `<p>⚡ Asistente ALMA v${VERSION} · perfil ${medico ? 'médico' : 'otros profesionales'}</p>` +
       secciones.map(([titulo, html]) => `<h4>${titulo}</h4>${html}`).join('') +
-      '<small>El script no guarda nada por ti: toda indicación o nota se revisa y se guarda en ALMA como siempre.</small>';
+      '<small>El script no guarda nada por ti: toda indicación o nota se revisa y se guarda en ALMA como siempre.</small>' +
+      `<p class="almah-ayuda-web">🌐 Instalación, novedades y más información: <a href="${PAGINA_WEB}" target="_blank" rel="noopener">${PAGINA_WEB.replace(/^https:\/\//, '')}</a></p>`;
     const cerrar = () => {
       document.removeEventListener('keydown', teclas, true);
       fondo.remove();
@@ -1535,6 +1537,8 @@
     #almah-dialogo .almah-ayuda p { font-weight: 400; margin: 2px 0; color: #333; }
     #almah-dialogo .almah-ayuda > p:first-child { font-weight: 700; }
     #almah-dialogo .almah-ayuda small { color: #5f6368; margin: 8px 0 4px; }
+    #almah-dialogo .almah-ayuda .almah-ayuda-web { font-size: 12.5px; margin: 0 0 6px; }
+    #almah-dialogo .almah-ayuda a { color: #007067; font-weight: 600; }
     #almah-dialogo kbd { font: 11px monospace; color: #555; background: #f2f2f2; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; }
     .almah-examenes { display: flex; flex-direction: column; gap: 4px; padding: 4px 6px;
       margin: 4px 0; background: #f4faf9; border-left: 3px solid #007067; }
