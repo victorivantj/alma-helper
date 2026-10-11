@@ -246,6 +246,8 @@
     ordenRow: 'tr[id^="OEOrdItem_ListEMR_"]',
     ordenTexto: '[id$="-item-TextRepresentation"]',
     ordenNombre: '[id$="-item-OrderName-link"]',
+    ordenActualRow: 'tr[id^="OEOrdItem_ListEMR_0-row-"]', // primera tabla: Atención Actual
+    ordenFarmacia: '[id$="-item-PharmacyStatus"]',
     // Resultados de "Búsqueda de Indicaciones"
     indicResultados: 'table[id^="tOEOrder_EntryPortal_ListLookup_"]',
     indicRow: 'tr[id^="OEOrder_EntryPortal_ListLookup_"][id*="-row-"]',
@@ -1246,7 +1248,16 @@
   // letra pequeña bajo los íconos y, dentro de la ficha del paciente, en una ventana
   // flotante. Se recuerda solo en memoria (por nombre, mientras la pestaña siga abierta).
   // ---------------------------------------------------------------------------
-  const prescripciones = new Map(); // nombre del paciente → { meds: [...], hora: 'HH:MM' }
+  // nombre del paciente → { meds: [...], hora: 'HH:MM', origen: 'mapa de camas' | 'Medicamentos' }.
+  // Se guarda la lectura más reciente de cualquiera de las dos fuentes.
+  const prescripciones = new Map();
+  const horaActual = () => new Date().toTimeString().slice(0, 5);
+
+  function guardarPrescripcion(nombre, meds, origen) {
+    const previo = prescripciones.get(nombre);
+    if (previo && previo.origen === origen && previo.meds.join(';') === meds.join(';')) return;
+    prescripciones.set(nombre, { meds, hora: horaActual(), origen });
+  }
 
   function medsDeCama(bed) {
     const img = bed.querySelector(SEL.iconoPastilla);
@@ -1255,14 +1266,10 @@
   }
 
   function decorarPrescripcionCamas() {
-    const hora = new Date().toTimeString().slice(0, 5);
     document.querySelectorAll(SEL.bed).forEach((bed) => {
       const meds = medsDeCama(bed);
       const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
-      if (nombre && meds.length) {
-        const previo = prescripciones.get(nombre);
-        if (previo?.meds.join(';') !== meds.join(';')) prescripciones.set(nombre, { meds, hora });
-      }
+      if (nombre && meds.length) guardarPrescripcion(nombre, meds, 'mapa de camas');
       const fila = bed.querySelector(SEL.bedIconos)?.closest('.floorplanBedDataRow');
       let caja = bed.querySelector('.almah-meds');
       const clave = meds.join(';');
@@ -1278,25 +1285,49 @@
     });
   }
 
+  // Respaldo desde la pantalla Medicamentos (tabla "Atención Actual"). Cuenta como vigente
+  // lo que termina hoy o después y farmacia no dio por finalizado: así coincide con el
+  // ícono de píldora, que sigue mostrando la indicación de ayer hasta que se haga la de hoy
+  // (el resaltado verde/gris de esa pantalla es más estricto).
+  function leerPrescripcionMedicamentos() {
+    const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
+    const filas = [...document.querySelectorAll(SEL.ordenActualRow)].filter((r) => /-row-\d+$/.test(r.id));
+    if (!nombre || !filas.length) return;
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const meds = new Set();
+    filas.forEach((r) => {
+      const texto = r.querySelector(SEL.ordenTexto)?.textContent || '';
+      const termino = parseFecha(texto.match(/Término:\s*(\S+)/)?.[1]);
+      const farmacia = r.querySelector(SEL.ordenFarmacia)?.textContent || '';
+      if (!termino || termino < hoy || clasificarOrden(texto) === 'suspendido') return;
+      if (/Ejecutado/i.test(texto.match(/Estado:\s*(\S+)/)?.[1] || '') || /Finalizado/i.test(farmacia)) return;
+      const n = r.querySelector(SEL.ordenNombre)?.textContent.replace(/\s+/g, ' ').trim();
+      if (n) meds.add(n);
+    });
+    guardarPrescripcion(nombre, [...meds], 'Medicamentos');
+  }
+
   let medsPlegado = false;
   try { medsPlegado = localStorage.getItem('almah-meds-plegado') === '1'; } catch (e) { /* sin storage */ }
 
-  // Ventana flotante (abajo a la izquierda por defecto, arrastrable, se pliega con un clic)
+  // Ventana flotante (abajo a la izquierda por defecto, arrastrable, se pliega con un clic).
+  // Sin datos del paciente queda como pestaña que abre Medicamentos.
   function actualizarMedsFlotante() {
     const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
-    const datos = nombre && prescripciones.get(nombre);
     let win = document.getElementById('almah-meds-flot');
-    if (!datos) {
+    if (!nombre) {
       if (win) win.hidden = true;
       return;
     }
+    const datos = prescripciones.get(nombre);
     if (!win) {
       win = document.createElement('div');
       win.id = 'almah-meds-flot';
       const head = document.createElement('div');
       head.className = 'almah-meds-head';
-      head.title = 'Mostrar/ocultar · arrastrar para mover';
       hacerArrastrable(win, head, () => {
+        if (win.classList.contains('almah-sin-datos')) return run('Medicamentos', () => medicamentos());
         medsPlegado = win.classList.toggle('almah-collapsed');
         try { localStorage.setItem('almah-meds-plegado', medsPlegado ? '1' : '0'); } catch (e) { /* sin storage */ }
         posicionMeds(win);
@@ -1310,19 +1341,29 @@
       document.body.appendChild(win);
       window.addEventListener('resize', () => posicionMeds(win));
     }
-    const clave = `${nombre}|${datos.meds.join(';')}`;
+    const clave = datos ? `${nombre}|${datos.origen}|${datos.hora}|${datos.meds.join(';')}` : `${nombre}|-`;
     win.hidden = false;
-    win.classList.toggle('almah-collapsed', medsPlegado);
+    win.classList.toggle('almah-sin-datos', !datos);
+    win.classList.toggle('almah-collapsed', !datos || medsPlegado);
     if (win.dataset.clave !== clave) {
       win.dataset.clave = clave;
-      win.querySelector('.almah-meds-head').innerHTML =
-        `<span>💊 Prescripción vigente (${datos.meds.length})</span><small>mapa de camas ${datos.hora}</small><span class="almah-meds-flecha"></span>`;
+      const head = win.querySelector('.almah-meds-head');
       const lista = win.querySelector('ul');
-      lista.replaceChildren(...datos.meds.map((m) => {
-        const li = document.createElement('li');
-        li.textContent = m;
-        return li;
-      }));
+      if (!datos) {
+        head.innerHTML = '<span>💊 Prescripción vigente</span><small class="almah-meds-link">abrir Medicamentos</small>';
+        head.title = 'Abre Medicamentos para cargar la prescripción vigente · arrastrar para mover';
+        lista.replaceChildren();
+      } else {
+        head.innerHTML = `<span>💊 Prescripción vigente (${datos.meds.length})</span><small></small><span class="almah-meds-flecha"></span>`;
+        head.querySelector('small').textContent = `${datos.origen} ${datos.hora}`;
+        head.title = 'Mostrar/ocultar · arrastrar para mover';
+        const items = datos.meds.length ? datos.meds : ['Sin medicamentos vigentes'];
+        lista.replaceChildren(...items.map((m) => {
+          const li = document.createElement('li');
+          li.textContent = m;
+          return li;
+        }));
+      }
     }
     posicionMeds(win);
   }
@@ -1356,7 +1397,10 @@
       decorarCamas();
       decorarPrescripcionCamas();
     }
-    if (document.querySelector(SEL.ordenRow)) resaltarMedicamentos();
+    if (document.querySelector(SEL.ordenRow)) {
+      resaltarMedicamentos();
+      leerPrescripcionMedicamentos();
+    }
     if (h.includes('OEOrder.EntryPortal')) {
       revisarPaciente6am();
       filtrarBusquedaIndicaciones();
@@ -1699,6 +1743,8 @@
     #almah-meds-flot li { margin: 1px 0; }
     #almah-meds-flot.almah-collapsed ul { display: none; }
     #almah-meds-flot.almah-collapsed { opacity: .9; }
+    #almah-meds-flot.almah-sin-datos .almah-meds-head { cursor: pointer; }
+    #almah-meds-flot .almah-meds-link { text-decoration: underline; }
     .almah-bedbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px 4px; }
     #almah-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
       background: #007067; color: #fff; padding: 8px 14px; border-radius: 6px; z-index: 100000;
