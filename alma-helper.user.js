@@ -249,6 +249,7 @@
     ordenNombre: '[id$="-item-OrderName-link"]',
     ordenFecha: '[id$="-item-DateOrdered"]', // fecha y hora de solicitud
     ordenHora: '[id$="-item-TimeOrdered"]',
+    ordenLinea: '[id$="-item-OrderLine-customItem"]', // dosis, vía y frecuencia
     ordenActualRow: 'tr[id^="OEOrdItem_ListEMR_0-row-"]', // primera tabla: Atención Actual
     ordenFarmacia: '[id$="-item-PharmacyStatus"]',
     // Resultados de "Búsqueda de Indicaciones"
@@ -800,10 +801,11 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Resaltado de indicaciones según fecha de solicitud
+  // Resaltado de indicaciones según el turno en que se solicitaron
   // ---------------------------------------------------------------------------
   const ESTADOS_MED = {
     vigente: 'Vigente',
+    renovar: 'Por renovar',
     terminado: 'Terminado',
     suspendido: 'Suspendido',
   };
@@ -813,26 +815,64 @@
     return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
   }
 
-  // Vigente: solicitada hace menos de 24 h (la receta diaria se renueva cada día).
-  // No usa la fecha de término: antes de la receta del día, la de ayer "termina hoy".
-  function clasificarOrden(row) {
+  // Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo
+  // (sin feriados). Devuelve el inicio del turno que contiene `d`.
+  function inicioTurno(d) {
+    const cambio = (dia) => (dia.getDay() === 0 || dia.getDay() === 6 ? 9 : 8);
+    const t = new Date(d);
+    t.setHours(cambio(t), 0, 0, 0);
+    if (t > d) {
+      t.setDate(t.getDate() - 1);
+      t.setHours(cambio(t), 0, 0, 0);
+    }
+    return t;
+  }
+
+  function fechaSolicitud(row) {
+    const fecha = parseFecha(row.querySelector(SEL.ordenFecha)?.textContent);
+    const hora = row.querySelector(SEL.ordenHora)?.textContent.match(/(\d{1,2}):(\d{2})/);
+    if (fecha && hora) fecha.setHours(+hora[1], +hora[2]);
+    return fecha;
+  }
+
+  const nombreOrden = (row) => row.querySelector(SEL.ordenNombre)?.textContent.replace(/\s+/g, ' ').trim() || '';
+
+  // Aunque ALMA las deje 24 h, la receta se renueva cada mañana y lo agregado en el
+  // turno es para ese turno:
+  //  vigente     solicitada en el turno actual
+  //  renovar     del turno anterior y aún sin una indicación más nueva del mismo fármaco
+  //  terminado   reemplazada por una más nueva, "UNA VEZ" de un turno pasado, o más antigua
+  // `ultimas`: nombre → fecha de solicitud más reciente en la misma tabla.
+  function clasificarOrden(row, ultimas) {
     const texto = row.querySelector(SEL.ordenTexto)?.textContent || '';
     if (/Estado:\s*(Suspendido|Descontinuado|Anulado|Cancelado)|Descontinuado el:\s*\d/i.test(texto))
       return 'suspendido';
-    const fecha = parseFecha(row.querySelector(SEL.ordenFecha)?.textContent);
+    const fecha = fechaSolicitud(row);
     if (!fecha) return null;
-    const [h, m] = (row.querySelector(SEL.ordenHora)?.textContent.match(/(\d{1,2}):(\d{2})/) || [0, 0, 0]).slice(1);
-    fecha.setHours(+h, +m);
-    return Date.now() - fecha.getTime() < 24 * 3600 * 1000 ? 'vigente' : 'terminado';
+    const actual = inicioTurno(new Date());
+    if (fecha >= actual) return 'vigente';
+    const anterior = inicioTurno(new Date(actual.getTime() - 1));
+    if (fecha < anterior || /\bUNA VEZ\b/i.test(row.querySelector(SEL.ordenLinea)?.textContent || '')) return 'terminado';
+    return ultimas?.get(nombreOrden(row)) > fecha ? 'terminado' : 'renovar';
   }
 
   let ocultarTerminados = false;
   try { ocultarTerminados = localStorage.getItem('almah-ocultar-terminados') === '1'; } catch (e) { /* sin storage */ }
 
   function resaltarMedicamentos() {
-    document.querySelectorAll(SEL.ordenRow).forEach((row) => {
-      if (!/-row-\d+$/.test(row.id)) return;
-      const estado = clasificarOrden(row);
+    const filas = [...document.querySelectorAll(SEL.ordenRow)].filter((row) => /-row-\d+$/.test(row.id));
+    const ultimasPorTabla = new Map(); // id de la tabla → (nombre → fecha más reciente)
+    const tablaDe = (row) => row.id.replace(/-row-\d+$/, '');
+    filas.forEach((row) => {
+      const fecha = fechaSolicitud(row);
+      if (!fecha) return;
+      if (!ultimasPorTabla.has(tablaDe(row))) ultimasPorTabla.set(tablaDe(row), new Map());
+      const ultimas = ultimasPorTabla.get(tablaDe(row));
+      const nombre = nombreOrden(row);
+      if (!(ultimas.get(nombre) >= fecha)) ultimas.set(nombre, fecha);
+    });
+    filas.forEach((row) => {
+      const estado = clasificarOrden(row, ultimasPorTabla.get(tablaDe(row)));
       if (row.dataset.almahMed !== (estado || '')) {
         row.dataset.almahMed = estado || '';
         row.querySelector('.almah-badge')?.remove();
@@ -1453,7 +1493,7 @@
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
-      ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> (solicitada hace menos de 24 h) <span class="almah-badge almah-badge-terminado">Terminado</span> <span class="almah-badge almah-badge-suspendido">Suspendido</span>. <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
+      ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
     ].filter(Boolean);
 
     const fondo = document.createElement('div');
@@ -1754,6 +1794,7 @@
     #almah-toast.almah-show { opacity: 1; }
     #almah-toast.almah-error { background: #b3261e; }
     tr[data-almah-med="vigente"] { background: #e6f4ea !important; box-shadow: inset 4px 0 #1e8e3e; }
+    tr[data-almah-med="renovar"] { background: #fff4e0 !important; box-shadow: inset 4px 0 #e37400; }
     tr[data-almah-med="terminado"] { opacity: .5; box-shadow: inset 4px 0 #9aa0a6; }
     tr[data-almah-med="suspendido"] { opacity: .5; box-shadow: inset 4px 0 #b3261e; }
     tr[data-almah-med="suspendido"] [id$="-item-OrderName-link"] { text-decoration: line-through; }
@@ -1761,6 +1802,7 @@
     .almah-badge { display: inline-block; font: 700 10px/1.6 system-ui, sans-serif; padding: 0 5px;
       border-radius: 3px; margin-right: 4px; color: #fff; vertical-align: middle; }
     .almah-badge-vigente { background: #1e8e3e; }
+    .almah-badge-renovar { background: #e37400; }
     .almah-badge-terminado { background: #80868b; }
     .almah-badge-suspendido { background: #b3261e; }
     .almah-aviso { cursor: pointer; font: 12px system-ui, sans-serif; color: #5f6368; background: #f1f3f4;
