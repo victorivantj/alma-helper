@@ -263,10 +263,6 @@
     pendienteRow: 'tr[id^="OEOrder_Entry_List_0-row-"]', // lista de indicaciones por guardar
     inicioFecha: '#OEOrder_Entry_0-item-OEORISttDat', // "Fecha de Inicio" para lo que se agregue
     inicioHora: '#OEOrder_Entry_0-item-OEORISttTim',
-    // Mapa de piso: nombre del paciente, fila de íconos e ícono de píldora (title = prescripción vigente)
-    bedNombre: '[id$="-patient-dataHeader-0-dataItem-0"]',
-    bedIconos: 'tc-icon-profile',
-    iconoPastilla: 'img.iconProfileImage[src*="pastilla"]',
     bannerNombre: '#PAPerson_Banner-row-0-item-BANNERName2',
   };
 
@@ -1283,38 +1279,12 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Prescripción vigente
-  //  - Mapa de piso: el título del ícono de píldora se muestra en letra pequeña bajo
-  //    los íconos de cada cama (solo informativo).
-  //  - Ficha del paciente: ventana flotante con lo vigente y por renovar según la pantalla
-  //    Medicamentos (misma regla de turnos que su resaltado; ver clasificarOrden). Se
-  //    recuerda solo en memoria, por nombre, y caduca al cambiar el turno.
+  // Prescripción vigente: en la ficha del paciente, ventana flotante con lo vigente y por
+  // renovar según la pantalla Medicamentos (misma regla de turnos que su resaltado; ver
+  // clasificarOrden). No usa el ícono de píldora del mapa: no coincide con lo indicado.
+  // Se recuerda solo en memoria, por nombre, y caduca al cambiar el turno.
   // ---------------------------------------------------------------------------
   const prescripciones = new Map(); // nombre → { vigentes, renovar, hora: 'HH:MM', turno: ms }
-
-  function medsDeCama(bed) {
-    const img = bed.querySelector(SEL.iconoPastilla);
-    const txt = (img?.title || img?.alt || '').replace(/^[^:]*:\s*/, '');
-    return txt.split(';').map((m) => m.trim()).filter(Boolean);
-  }
-
-  function decorarPrescripcionCamas() {
-    document.querySelectorAll(SEL.bed).forEach((bed) => {
-      const meds = medsDeCama(bed);
-      const fila = bed.querySelector(SEL.bedIconos)?.closest('.floorplanBedDataRow');
-      let caja = bed.querySelector('.almah-meds');
-      const clave = meds.join(';');
-      if (caja && caja.dataset.meds === clave && caja.previousElementSibling === fila) return;
-      caja?.remove();
-      if (!fila || !meds.length) return;
-      caja = document.createElement('div');
-      caja.className = 'almah-meds';
-      caja.dataset.meds = clave;
-      caja.textContent = `💊 ${meds.join(' · ')}`;
-      caja.title = `Prescripción vigente:\n${meds.join('\n')}`;
-      fila.after(caja);
-    });
-  }
 
   // Lee el resaltado ya aplicado a la tabla "Atención Actual" (resaltarMedicamentos)
   function leerPrescripcionMedicamentos() {
@@ -1427,10 +1397,7 @@
   // Cada función trabaja solo en su pantalla, para no recorrer todo en cada cambio
   function decorarTodo() {
     const h = location.hash;
-    if (h.startsWith('#/Floorplan')) {
-      decorarCamas();
-      decorarPrescripcionCamas();
-    }
+    if (h.startsWith('#/Floorplan')) decorarCamas();
     if (document.querySelector(SEL.ordenRow)) {
       resaltarMedicamentos();
       leerPrescripcionMedicamentos();
@@ -1446,7 +1413,7 @@
 
   // Deja ALMA como sin el script: quita botones, barras, resaltados y filtros
   function limpiarTodo() {
-    document.querySelectorAll('.almah-bedbar, .almah-meds, .almah-examenes, .almah-aviso, .almah-badge').forEach((e) => e.remove());
+    document.querySelectorAll('.almah-bedbar, .almah-examenes, .almah-aviso, .almah-badge').forEach((e) => e.remove());
     document.querySelectorAll('.almah-oculto, .almah-filtrada').forEach((e) => e.classList.remove('almah-oculto', 'almah-filtrada'));
     document.querySelectorAll('[data-almah-med]').forEach((e) => e.removeAttribute('data-almah-med'));
     document.getElementById('almah-panel')?.classList.remove('almah-hay-contexto');
@@ -1476,7 +1443,7 @@
     const secciones = [
       ['Panel y pestaña', `<p>La pestaña <b>⚡ Asistente ALMA</b> (borde derecho) abre este panel con un clic o con <kbd>${t('togglePanel')}</kbd>. Se puede arrastrar; si se suelta cerca del borde, queda pegada. El interruptor <b>Funciones</b> apaga todo el script sin desinstalarlo.</p>`],
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
-      ['💊 Prescripción vigente', '<p>Bajo los íconos de cada cama aparece en letra pequeña la prescripción vigente (la misma del ícono de píldora). Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra lo <b>vigente</b> y lo <b>por renovar</b> según la pantalla Medicamentos (misma regla de turnos que su resaltado). Un clic en su título la pliega o despliega, y se puede arrastrar. Si aún no se ha abierto Medicamentos de ese paciente en este turno, la pestaña dice <b>abrir Medicamentos</b> y con un clic la carga.</p>'],
+      ['💊 Prescripción vigente', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra lo <b>vigente</b> y lo <b>por renovar</b> según la pantalla Medicamentos (misma regla de turnos que su resaltado). Un clic en su título la pliega o despliega, y se puede arrastrar. Si aún no se ha abierto Medicamentos de ese paciente en este turno, la pestaña dice <b>abrir Medicamentos</b> y con un clic la carga.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b> (incluido el turno de noche). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
       medico && ['🔒 Cerrar evolución', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus evoluciones de hoy que sigan abiertas. Pide confirmación y luego ALMA pide la suya.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
@@ -1762,8 +1729,6 @@
     .almah-btn { cursor: pointer; border: 1px solid #007067; background: #e8f4f3; color: #00554e;
       border-radius: 4px; padding: 2px 6px; font-size: 11px; }
     .almah-btn:hover { background: #007067; color: #fff; }
-    .almah-meds { font: 10px/1.25 system-ui, sans-serif; color: #444; padding: 1px 4px 2px;
-      overflow-wrap: anywhere; }
     #almah-meds-flot { position: fixed; left: 16px; bottom: 0; z-index: 99998; max-width: 420px; min-width: 220px;
       font: 12px/1.35 system-ui, sans-serif; background: #fff; border: 1px solid #007067; border-radius: 8px 8px 0 0;
       box-shadow: 0 4px 16px rgba(0,0,0,.2); overflow: hidden; }
