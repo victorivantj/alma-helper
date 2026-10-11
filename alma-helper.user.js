@@ -1286,6 +1286,19 @@
   // ---------------------------------------------------------------------------
   const prescripciones = new Map(); // nombre → { vigentes, renovar, hora: 'HH:MM', turno: ms }
 
+  // Nombre corto para la ventana: la presentación se cambia por la vía de administración
+  // (de la columna "Inf. adicional"), p. ej. "CLOPIDOGREL COMPRIMIDO RECUBIERTO 75 MG" →
+  // "CLOPIDOGREL ORAL 75 MG", "LORAZEPAM AMPOLLA 4 MG/2 ML" (intramuscular) → "LORAZEPAM IM 4 MG/2 ML".
+  const VIAS = [[/^ORAL/, 'ORAL'], [/^INTRAVENOSA/, 'IV'], [/^SUBCUTANEA/, 'SC'], [/^INTRAMUSCULAR/, 'IM']];
+  const PRESENTACION = /\b(FRASCO AMPOLLA|AMPOLLA|COMPRIMIDO|CM|JERING[AE] PRE-LLENADA|JERING[AE]|MATRAZ)\b/;
+  function nombreCorto(row) {
+    const nombre = nombreOrden(row);
+    const partes = (row.querySelector(SEL.ordenLinea)?.textContent || '').split('—').map((p) => sinTildes(p).toUpperCase());
+    const via = partes.map((p) => VIAS.find(([re]) => re.test(p))?.[1]).find(Boolean);
+    if (!via) return nombre;
+    return nombre.replace(PRESENTACION, via).replace(/\s*\bRECUBIERTO\b/, '').replace(/\s+/g, ' ').trim();
+  }
+
   // Lee el resaltado ya aplicado a la tabla "Atención Actual" (resaltarMedicamentos)
   function leerPrescripcionMedicamentos() {
     // Otras pantallas (p. ej. RCE PRINCIPAL) usan la misma tabla con otro contenido
@@ -1294,7 +1307,7 @@
     const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
     const filas = [...document.querySelectorAll(SEL.ordenActualRow)].filter((r) => /-row-\d+$/.test(r.id));
     if (!nombre || !filas.length) return;
-    const nombres = (estado) => [...new Set(filas.filter((r) => r.dataset.almahMed === estado).map(nombreOrden))].filter(Boolean);
+    const nombres = (estado) => [...new Set(filas.filter((r) => r.dataset.almahMed === estado).map(nombreCorto))].filter(Boolean);
     const vigentes = nombres('vigente');
     const renovar = nombres('renovar').filter((n) => !vigentes.includes(n));
     const turno = inicioTurno(new Date()).getTime();
