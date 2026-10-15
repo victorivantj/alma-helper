@@ -254,6 +254,7 @@
     ordenFecha: '[id$="-item-DateOrdered"]', // fecha y hora de solicitud
     ordenHora: '[id$="-item-TimeOrdered"]',
     ordenLinea: '[id$="-item-OrderLine-customItem"]', // dosis, vía y frecuencia
+    ordenTabla: 'table[id^="tOEOrdItem_ListEMR_"]', // primera tabla de indicaciones
     ordenActualRow: 'tr[id^="OEOrdItem_ListEMR_0-row-"]', // primera tabla: Atención Actual
     ordenFarmacia: '[id$="-item-PharmacyStatus"]',
     // Resultados de "Búsqueda de Indicaciones"
@@ -923,6 +924,33 @@
   let ocultarTerminados = false;
   try { ocultarTerminados = localStorage.getItem('almah-ocultar-terminados') === '1'; } catch (e) { /* sin storage */ }
 
+  // Interruptor sobre la tabla: apaga el resaltado (colores, insignias y "Ocultar
+  // terminados"). La clasificación se sigue calculando para la ventana de prescripción.
+  let filtroMeds = true;
+  try { filtroMeds = localStorage.getItem('almah-filtro-meds') !== '0'; } catch (e) { /* sin storage */ }
+
+  function aplicarFiltroMeds() {
+    document.documentElement.classList.toggle('almah-sin-filtro-meds', !filtroMeds);
+    const tabla = document.querySelector(SEL.ordenTabla);
+    if (!tabla || tabla.previousElementSibling?.classList.contains('almah-filtro-meds')) return;
+    document.querySelectorAll('.almah-filtro-meds').forEach((e) => e.remove());
+    const barra = document.createElement('label');
+    barra.className = 'almah-filtro-meds';
+    barra.title = 'Resalta cada indicación según el turno en que se solicitó (Asistente ALMA)';
+    barra.innerHTML = '<input type="checkbox"><span class="almah-switch"></span><span>Resaltado ⚡: <b>Vigente</b> · <b>Por renovar</b> · <b>Terminado</b> · <b>Suspendido</b></span>';
+    const chk = barra.querySelector('input');
+    chk.checked = filtroMeds;
+    chk.addEventListener('change', () => {
+      filtroMeds = chk.checked;
+      try { localStorage.setItem('almah-filtro-meds', filtroMeds ? '1' : '0'); } catch (e) { /* sin storage */ }
+      aplicarFiltroMeds();
+      resaltarMedicamentos();
+      actualizarPanelContextual();
+      toast(filtroMeds ? 'Resaltado de medicamentos activado' : 'Resaltado de medicamentos desactivado');
+    });
+    tabla.before(barra);
+  }
+
   function resaltarMedicamentos() {
     const filas = [...document.querySelectorAll(SEL.ordenRow)].filter((row) => /-row-\d+$/.test(row.id));
     const ultimasPorTabla = new Map(); // id de la tabla → (nombre → fecha más reciente)
@@ -949,7 +977,7 @@
       }
       row.classList.toggle(
         'almah-oculto',
-        ocultarTerminados && (estado === 'terminado' || estado === 'suspendido')
+        filtroMeds && ocultarTerminados && (estado === 'terminado' || estado === 'suspendido')
       );
     });
   }
@@ -1329,7 +1357,7 @@
     { id: 'medicamentos', label: '💊 Medicamentos', fn: () => medicamentos() },
     // soloEn: el botón aparece (resaltado) solo cuando la función devuelve true
     { id: 'ocultarTerminados', label: '👁️ Ocultar terminados', fn: async () => toggleTerminados(),
-      soloEn: () => !!document.querySelector(SEL.ordenRow) },
+      soloEn: () => filtroMeds && !!document.querySelector(SEL.ordenRow) },
   ];
   let ACCIONES = [];
   let perfilConstruido = null;
@@ -1478,6 +1506,7 @@
     const h = location.hash;
     if (h.startsWith('#/Floorplan')) decorarCamas();
     if (document.querySelector(SEL.ordenRow)) {
+      aplicarFiltroMeds();
       resaltarMedicamentos();
       leerPrescripcionMedicamentos();
     }
@@ -1492,9 +1521,10 @@
 
   // Deja ALMA como sin el script: quita botones, barras, resaltados y filtros
   function limpiarTodo() {
-    document.querySelectorAll('.almah-bedbar, .almah-examenes, .almah-aviso, .almah-badge').forEach((e) => e.remove());
+    document.querySelectorAll('.almah-bedbar, .almah-examenes, .almah-aviso, .almah-badge, .almah-filtro-meds').forEach((e) => e.remove());
     document.querySelectorAll('.almah-oculto, .almah-filtrada').forEach((e) => e.classList.remove('almah-oculto', 'almah-filtrada'));
     document.querySelectorAll('[data-almah-med]').forEach((e) => e.removeAttribute('data-almah-med'));
+    document.documentElement.classList.remove('almah-sin-filtro-meds');
     document.getElementById('almah-panel')?.classList.remove('almah-hay-contexto');
     const flot = document.getElementById('almah-meds-flot');
     if (flot) flot.hidden = true;
@@ -1531,7 +1561,7 @@
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
-      ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
+      ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
     ].filter(Boolean);
 
     const fondo = document.createElement('div');
@@ -1835,12 +1865,24 @@
       font: 13px system-ui, sans-serif; opacity: 0; transition: opacity .2s; pointer-events: none; }
     #almah-toast.almah-show { opacity: 1; }
     #almah-toast.almah-error { background: #b3261e; }
-    tr[data-almah-med="vigente"] { background: #e6f4ea !important; box-shadow: inset 4px 0 #1e8e3e; }
-    tr[data-almah-med="renovar"] { background: #fff4e0 !important; box-shadow: inset 4px 0 #e37400; }
-    tr[data-almah-med="terminado"] { opacity: .5; box-shadow: inset 4px 0 #9aa0a6; }
-    tr[data-almah-med="suspendido"] { opacity: .5; box-shadow: inset 4px 0 #b3261e; }
-    tr[data-almah-med="suspendido"] [id$="-item-OrderName-link"] { text-decoration: line-through; }
+    html:not(.almah-sin-filtro-meds) tr[data-almah-med="vigente"] { background: #e6f4ea !important; box-shadow: inset 4px 0 #1e8e3e; }
+    html:not(.almah-sin-filtro-meds) tr[data-almah-med="renovar"] { background: #fff4e0 !important; box-shadow: inset 4px 0 #e37400; }
+    html:not(.almah-sin-filtro-meds) tr[data-almah-med="terminado"] { opacity: .5; box-shadow: inset 4px 0 #9aa0a6; }
+    html:not(.almah-sin-filtro-meds) tr[data-almah-med="suspendido"] { opacity: .5; box-shadow: inset 4px 0 #b3261e; }
+    html:not(.almah-sin-filtro-meds) tr[data-almah-med="suspendido"] [id$="-item-OrderName-link"] { text-decoration: line-through; }
     tr.almah-oculto { display: none !important; }
+    html.almah-sin-filtro-meds tr .almah-badge { display: none; }
+    .almah-filtro-meds { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; padding: 4px 8px;
+      font: 12px system-ui, sans-serif; color: #00554e; background: #f4faf9; border-left: 3px solid #007067;
+      cursor: pointer; user-select: none; width: fit-content; }
+    .almah-filtro-meds input { display: none; }
+    .almah-filtro-meds .almah-switch { width: 30px; height: 16px; border-radius: 8px; background: #9aa0a6;
+      position: relative; transition: background .2s; flex: none; }
+    .almah-filtro-meds .almah-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px;
+      height: 12px; border-radius: 50%; background: #fff; transition: left .2s; }
+    .almah-filtro-meds input:checked + .almah-switch { background: #1e8e3e; }
+    .almah-filtro-meds input:checked + .almah-switch::after { left: 16px; }
+    .almah-filtro-meds input:not(:checked) ~ span { opacity: .6; }
     .almah-badge { display: inline-block; font: 700 10px/1.6 system-ui, sans-serif; padding: 0 5px;
       border-radius: 3px; margin-right: 4px; color: #fff; vertical-align: middle; }
     .almah-badge-vigente { background: #1e8e3e; }
