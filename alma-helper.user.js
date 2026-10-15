@@ -205,6 +205,8 @@
       cerrarEvolucion: { alt: true, key: 'b' },
       indicaciones: { alt: true, key: 'i' },
       medicamentos: { alt: true, key: 'm' },
+      documentos: { alt: true, key: 'o' },
+      examenes: { alt: true, key: 'l' },
       ocultarTerminados: { alt: true, key: 't' },
       togglePanel: { alt: true, key: 'a' },
     },
@@ -511,6 +513,36 @@
     if (!cap) throw new Error('no apareció "Medicamentos" en el RCE');
     cap.parentElement.click();
   }
+
+  // Registro Clínico → RCE → pestaña `sub` dentro del grupo `grupo` (p. ej. Laboratorio →
+  // Resultados de Laboratorio - Atención Actual). Las subpestañas solo responden con su
+  // grupo expandido: al pulsar el grupo, ALMA lo abre y selecciona su primera subpestaña.
+  async function abrirSubpestanaRCE(grupo, sub, actionBtn) {
+    const capGrupo = () => [...document.querySelectorAll(SEL.chartMenuCaption)]
+      .find((c) => /^tc_Chart-menu-\d+-caption$/.test(c.id) && normalizar(c.textContent) === normalizar(grupo));
+    if (!capGrupo()) {
+      await abrirRegistroClinico(actionBtn);
+      document.querySelector(SEL.panelRCE).click();
+    }
+    const g = await waitFor(capGrupo, { timeout: 15000 });
+    if (!g) throw new Error(`no apareció "${grupo}" en el RCE`);
+    const capSub = () => [...document.querySelectorAll(`[id^="${g.id.replace('-caption', '')}-item-"][id$="-caption"]`)]
+      .find((c) => normalizar(c.textContent) === normalizar(sub));
+    const abierta = () => capSub()?.parentElement.classList.contains('chartMenuSelected');
+    if (abierta()) return;
+    if (!capSub()) throw new Error(`no apareció "${sub}" en "${grupo}"`);
+    if (!g.parentElement.classList.contains('chartMenuItemExpanded')) {
+      g.parentElement.click();
+      await waitFor(() => g.parentElement.classList.contains('chartMenuItemExpanded'), { timeout: 10000 });
+    }
+    if (!abierta()) capSub().parentElement.click();
+    if (!(await waitFor(abierta, { timeout: 15000 }))) throw new Error(`no se abrió "${sub}"`);
+  }
+
+  const documentos = (actionBtn) =>
+    abrirSubpestanaRCE('Documentos e Imágenes', 'Imágenes y Documentos del Paciente', actionBtn);
+  const examenes = (actionBtn) =>
+    abrirSubpestanaRCE('Laboratorio', 'Resultados de Laboratorio - Atencion Actual', actionBtn);
 
   // ---------------------------------------------------------------------------
   // Evolucionar: copia la evolución más reciente de otro médico
@@ -1308,6 +1340,12 @@
         ),
         mkBtn('💊 Medicam.', 'Medicamentos de este paciente', () =>
           run('Medicamentos', () => medicamentos(actionBtn))
+        ),
+        mkBtn('🧪 Exámenes', 'Resultados de laboratorio de la atención actual', () =>
+          run('Exámenes', () => examenes(actionBtn))
+        ),
+        mkBtn('📄 Docs', 'Imágenes y documentos del paciente', () =>
+          run('Documentos', () => documentos(actionBtn))
         )
       );
       if (!esMedico()) {
@@ -1355,6 +1393,8 @@
     { id: 'notasTens', label: '🧑‍⚕️ Notas TENS', fn: () => notasDe('tens'), perfil: 'otro' },
     { id: 'indicaciones', label: '✍️ Indicaciones', fn: () => indicaciones() },
     { id: 'medicamentos', label: '💊 Medicamentos', fn: () => medicamentos() },
+    { id: 'examenes', label: '🧪 Exámenes', fn: () => examenes() },
+    { id: 'documentos', label: '📄 Documentos', fn: () => documentos() },
     // soloEn: el botón aparece (resaltado) solo cuando la función devuelve true
     { id: 'ocultarTerminados', label: '👁️ Ocultar terminados', fn: async () => toggleTerminados(),
       soloEn: () => filtroMeds && !!document.querySelector(SEL.ordenRow) },
@@ -1562,6 +1602,7 @@
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
+      ['🧪 Exámenes y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente.</p>`],
     ].filter(Boolean);
 
     const fondo = document.createElement('div');
