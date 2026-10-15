@@ -748,7 +748,8 @@
   }
 
   // Cuadro de elección sobre la página. Devuelve el `valor` elegido, o null (Esc/Cancelar).
-  function preguntar(mensaje, opciones) {
+  // `detalle`: lista opcional de líneas (texto) que se muestra bajo la pregunta
+  function preguntar(mensaje, opciones, detalle = []) {
     return new Promise((resolve) => {
       const fondo = document.createElement('div');
       fondo.id = 'almah-dialogo';
@@ -757,6 +758,16 @@
       const p = document.createElement('p');
       p.textContent = mensaje;
       caja.appendChild(p);
+      if (detalle.length) {
+        const ul = document.createElement('ul');
+        ul.className = 'almah-detalle';
+        detalle.forEach((linea) => {
+          const li = document.createElement('li');
+          li.textContent = linea;
+          ul.appendChild(li);
+        });
+        caja.appendChild(ul);
+      }
       const cerrar = (valor) => {
         document.removeEventListener('keydown', teclas, true);
         fondo.remove();
@@ -823,13 +834,14 @@
     toast(`Copiada la evolución del ${previa.fecha} (${previa.autor}). Revísala y actualízala antes de guardar.`, false, 8000);
   }
 
-  // Bloquea (candado de Búsqueda) las evoluciones propias de hoy que siguen abiertas.
+  // Bloquea (candado de Búsqueda) los registros propios de hoy y de ayer que siguen abiertos.
   // Pide confirmación antes; solo toca entradas del usuario conectado.
   const candadoAbierto = (row) =>
     row.querySelector(SEL.entradaCandado)?.getAttribute('md-svg-icon') === 'system-unlock';
 
-  // Evoluciones propias de hoy y de ayer. En la lista, las de hoy empiezan con la hora
-  // ("17:52 …") y las de días anteriores con la fecha ("09/10/2026 …").
+  // Registros propios de hoy y de ayer, de cualquier tipo (evolución, nota, atención TP,
+  // valoración…) y profesión. En la lista, los de hoy empiezan con la hora ("17:52 …") y
+  // los de días anteriores con la fecha ("09/10/2026 …").
   function evolucionesPropias() {
     const yo = usuarioConectado();
     const ayer = new Date();
@@ -838,12 +850,12 @@
     return filasEntradas()
       .map((row) => {
         const texto = row.querySelector(SEL.entradaTexto)?.textContent.replace(/\s+/g, ' ').trim() || '';
-        if (!texto.toUpperCase().includes(yo) || !CONFIG.profesionalACopiar.test(texto) ||
-          !CONFIG.tipoEvolucionACopiar.test(texto.split(') -').pop())) return null;
+        if (!texto.toUpperCase().includes(yo)) return null;
+        const tipo = texto.includes(') -') ? texto.split(') -').pop().trim() : '';
         const hora = texto.match(/^(\d{2}:\d{2})\b/)?.[1];
-        if (hora) return { row, id: row.id, dia: 'hoy', etiqueta: hora };
+        if (hora) return { row, id: row.id, dia: 'hoy', etiqueta: hora, tipo };
         const fecha = texto.match(/^(\d{2}\/\d{2})\/\d{4}/);
-        if (fecha && parseFecha(texto)?.getTime() === ayer.getTime()) return { row, id: row.id, dia: 'ayer', etiqueta: fecha[1] };
+        if (fecha && parseFecha(texto)?.getTime() === ayer.getTime()) return { row, id: row.id, dia: 'ayer', etiqueta: fecha[1], tipo };
         return null;
       })
       .filter(Boolean);
@@ -858,13 +870,13 @@
     const propias = evolucionesPropias();
     const abiertas = propias.filter((e) => candadoAbierto(e.row));
     if (!abiertas.length) {
-      toast(propias.length ? 'Tus evoluciones de hoy y de ayer ya están bloqueadas 🔒' : 'No hay evoluciones tuyas de hoy ni de ayer', false, 5000);
+      toast(propias.length ? 'Tus registros de hoy y de ayer ya están bloqueados 🔒' : 'No hay registros tuyos de hoy ni de ayer', false, 5000);
       return;
     }
     const describir = (lista) => ['hoy', 'ayer']
       .map((dia) => {
         const del = lista.filter((e) => e.dia === dia);
-        return del.length ? `${dia} (${del.map((e) => e.etiqueta).join(', ')})` : null;
+        return del.length ? `${dia} (${dia === 'hoy' ? del.map((e) => e.etiqueta).join(', ') : `${del.length} el ${del[0].etiqueta}`})` : null;
       })
       .filter(Boolean)
       .join(' y ');
@@ -873,13 +885,14 @@
     const opciones = [{ valor: 'todas', texto: `🔒 Bloquear ${describir(abiertas)}`, tecla: 'b' }];
     if (hoy.length && ayer.length) {
       opciones.push({ valor: 'hoy', texto: `Solo hoy (${hoy.map((e) => e.etiqueta).join(', ')})`, tecla: 'h' });
-      opciones.push({ valor: 'ayer', texto: `Solo ayer (${ayer[0].etiqueta})`, tecla: 'a' });
+      opciones.push({ valor: 'ayer', texto: `Solo ayer (${ayer.length} el ${ayer[0].etiqueta})`, tecla: 'a' });
     }
     const resp = await preguntar(
       abiertas.length > 1
-        ? `¿Bloquear tus evoluciones de ${describir(abiertas)}? Después no podrás editarlas.`
-        : `¿Bloquear tu evolución de ${describir(abiertas)}? Después no podrás editarla.`,
-      opciones
+        ? `¿Bloquear tus ${abiertas.length} registros abiertos? Después no podrás editarlos.`
+        : '¿Bloquear tu registro abierto? Después no podrás editarlo.',
+      opciones,
+      abiertas.map((e) => `${e.dia} ${e.etiqueta} · ${e.tipo || 'registro'}`)
     );
     if (!resp) return;
     const elegidas = resp === 'todas' ? abiertas : abiertas.filter((e) => e.dia === resp);
@@ -894,7 +907,7 @@
         return;
       }
     }
-    toast(`${elegidas.length > 1 ? 'Evoluciones bloqueadas' : 'Evolución bloqueada'} 🔒 (${describir(elegidas)})`, false, 5000);
+    toast(`${elegidas.length > 1 ? 'Registros bloqueados' : 'Registro bloqueado'} 🔒 (${describir(elegidas)})`, false, 5000);
   }
 
   // ---------------------------------------------------------------------------
@@ -1325,13 +1338,13 @@
         bar.append(
           mkBtn('🩺 Evolucionar', 'Evolucionar (copia la evolución anterior)', () =>
             run('Evolucionar', () => evolucionDelDia(actionBtn))
-          ),
-          mkBtn('🔒 Cerrar', 'Bloquear mi evolución de hoy', () =>
-            run('Cerrar evolución', () => cerrarEvolucion(actionBtn))
           )
         );
       }
       bar.append(
+        mkBtn('🔒 Cerrar', 'Bloquear mis evoluciones y notas de hoy y de ayer', () =>
+          run('Cerrar evoluciones y notas', () => cerrarEvolucion(actionBtn))
+        ),
         mkBtn('📝 Notas MD', 'Notas médicas de este paciente', () =>
           run('Notas médicas', () => notasMedicas(actionBtn))
         ),
@@ -1386,7 +1399,7 @@
   // perfil: 'medico' u 'otro' (sin perfil: para todos). Ver perfilActual().
   const TODAS_LAS_ACCIONES = [
     { id: 'evolucion', label: '🩺 Evolucionar', fn: () => evolucionDelDia(), perfil: 'medico' },
-    { id: 'cerrarEvolucion', label: '🔒 Cerrar evolución', fn: () => cerrarEvolucion(), perfil: 'medico' },
+    { id: 'cerrarEvolucion', label: '🔒 Cerrar evoluciones y notas', fn: () => cerrarEvolucion() },
     { id: 'notasMedicas', label: '📝 Notas médicas', fn: () => notasMedicas() },
     { id: 'notasEnfermeria', label: '🩹 Notas de enfermería', fn: () => notasDe('enfermeria'), perfil: 'otro' },
     { id: 'notasKinesiologia', label: '🏃 Notas de kinesiología', fn: () => notasDe('kinesiologia'), perfil: 'otro' },
@@ -1594,7 +1607,7 @@
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
       ['💊 Prescripción vigente', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra lo <b>vigente</b> y lo <b>por renovar</b> según la pantalla Medicamentos (misma regla de turnos que su resaltado). Un clic en su título la pliega o despliega, y se puede arrastrar. Si aún no se ha abierto Medicamentos de ese paciente en este turno, la pestaña dice <b>abrir Medicamentos</b> y con un clic la carga.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
-      medico && ['🔒 Cerrar evolución', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus evoluciones de hoy y de ayer que sigan abiertas. Si hay de ambos días, puedes elegir bloquear todas o solo las de un día. Pide confirmación y luego ALMA pide la suya.</p>`],
+      ['🔒 Cerrar evoluciones y notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
@@ -1944,6 +1957,7 @@
       padding: 8px 10px; font-size: 14px; text-align: left; }
     #almah-dialogo .almah-btn small { display: block; font-weight: 400; color: #5f6368; margin-top: 2px; }
     #almah-dialogo .almah-btn:hover small { color: #e8f4f3; }
+    #almah-dialogo .almah-detalle { margin: 0 0 4px; padding-left: 20px; font-size: 13px; color: #333; max-height: 30vh; overflow-y: auto; }
     #almah-dialogo .almah-cancelar { justify-content: center; background: #f1f3f4; border-color: #9aa0a6; color: #333; }
   `;
   const style = document.createElement('style');
