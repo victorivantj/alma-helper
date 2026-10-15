@@ -147,6 +147,10 @@
     ],
     // Botón "⏰ 6 AM": hora a la que se programan los exámenes (si ya pasó hoy, mañana)
     horaExamenes: 6,
+    // Botón "⏰ 8 AM" (reposo, régimen y fármacos): las 08:00 del día; antes de las 06:00,
+    // las 08:00 del día anterior (la receta del turno que sigue en curso)
+    horaIndicaciones: 8,
+    corteIndicaciones: 6,
     // Resto de exámenes: menú "Otros exámenes ▾" agrupado
     otrosExamenes: [
       { grupo: 'Hematología', items: [
@@ -1207,7 +1211,8 @@
     [...document.querySelectorAll(SEL.pendienteRow)].filter((r) => /-row-\d+$/.test(r.id) && isVisible(r));
 
   // Menú desplegable agrupado. Cada opción es un ítem { titulo, buscar, nombre|producto, via? }
-  function crearMenu(titulo, grupos, { examenes = false } = {}) {
+  // `modo`: modo programado (⏰ 6 AM / ⏰ 8 AM) que se respeta al agregar
+  function crearMenu(titulo, grupos, { modo = null } = {}) {
     const sel = document.createElement('select');
     sel.className = 'almah-select';
     sel.title = `Agregar a la lista: ${titulo.toLowerCase()}`;
@@ -1229,7 +1234,7 @@
       if (!it) return;
       const { titulo: t, ...item } = it;
       const set = { titulo: t, items: [item] };
-      run(t, () => (examenes ? agregarExamenesProgramados(set) : agregarExamenes(set)));
+      run(t, () => (modo ? modo.agregar((nota) => agregarExamenes(set, nota)) : agregarExamenes(set)));
     });
     return sel;
   }
@@ -1260,8 +1265,9 @@
     bar.className = 'almah-examenes';
     bar.append(
       filaBarra('Indicaciones:',
-        ...CONFIG.indicacionesRapidas.map((g) => crearMenu(g.titulo, gruposDeNombres(g))),
-        crearMenu('Fármacos', CONFIG.farmacos)),
+        ...CONFIG.indicacionesRapidas.map((g) => crearMenu(g.titulo, gruposDeNombres(g), { modo: modoIndicaciones })),
+        crearMenu('Fármacos', CONFIG.farmacos, { modo: modoIndicaciones }),
+        modoIndicaciones.boton()),
       filaBarra('Exámenes:',
         ...CONFIG.examenes.map((set) => {
           const b = mkBtn(set.titulo, `Agregar a la lista: ${set.items.map((i) => i.nombre).join(', ')}`, () =>
@@ -1269,59 +1275,35 @@
           b.classList.add('almah-set');
           return b;
         }),
-        crearMenu('Otros exámenes', CONFIG.otrosExamenes, { examenes: true }),
-        (() => {
-          const b = mkBtn('', '', () => {
-            revisarPaciente6am();
-            modo6am = !modo6am;
-            episodio6am = modo6am ? episodioActual() : null;
-            guardar6am();
-            actualizarBoton6am(b);
-            const { fecha, hora } = proximaHoraExamenes();
-            toast(modo6am ? `⏰ Exámenes se programarán para el ${fecha} a las ${hora}` : '⏰ Exámenes con la hora actual');
-          });
-          b.classList.add('almah-6am');
-          actualizarBoton6am(b);
-          return b;
-        })()),
+        crearMenu('Otros exámenes', CONFIG.otrosExamenes, { modo: modoExamenes }),
+        modoExamenes.boton()),
     );
     fila.after(bar);
   }
 
-  // ---- Programar exámenes a las 6 AM ----
+  // ---- Programar a una hora fija: ⏰ 6 AM (exámenes) y ⏰ 8 AM (reposo, régimen, fármacos) ----
   // Los campos "Fecha de Inicio"/"Hora Inicio" de la cabecera se aplican a lo que se
-  // agregue DESPUÉS (no cambian lo que ya está en la lista).
-  // Se mantiene activo mientras sigas en el mismo paciente (N° de episodio); al abrir
-  // otro paciente se apaga solo. En el mapa (sin banner) conserva el estado.
-  let modo6am = false;
-  let episodio6am = null;
-  try {
-    const g = JSON.parse(sessionStorage.getItem('almah-6am') || 'null');
-    if (g) ({ activo: modo6am, episodio: episodio6am } = g);
-  } catch (e) { /* sin storage */ }
-
-  function guardar6am() {
-    try { sessionStorage.setItem('almah-6am', JSON.stringify({ activo: modo6am, episodio: episodio6am })); } catch (e) { /* sin storage */ }
-  }
-
-  // Apaga 6 AM si cambió el paciente; devuelve true si se apagó
-  function revisarPaciente6am() {
-    const ep = episodioActual();
-    if (!modo6am || !ep || ep === episodio6am) return false;
-    modo6am = false;
-    episodio6am = null;
-    guardar6am();
-    document.querySelectorAll('.almah-6am').forEach(actualizarBoton6am);
-    toast('⏰ 6 AM desactivado: cambiaste de paciente');
-    return true;
-  }
+  // agregue DESPUÉS (no cambian lo que ya está en la lista): se fijan, se agrega y se
+  // restauran. Cada modo se mantiene mientras sigas en el mismo paciente (N° de episodio);
+  // al abrir otro paciente se apaga solo. En el mapa (sin banner) conserva el estado.
+  const dosDigitos = (n) => String(n).padStart(2, '0');
+  const fechaHora = (d, h) => ({
+    fecha: `${dosDigitos(d.getDate())}/${dosDigitos(d.getMonth() + 1)}/${d.getFullYear()}`,
+    hora: `${dosDigitos(h)}:00`,
+  });
 
   // Próximas 06:00: antes de medianoche → mañana; entre 00:00 y 06:00 → hoy
   function proximaHoraExamenes() {
     const d = new Date();
     if (d.getHours() >= CONFIG.horaExamenes) d.setDate(d.getDate() + 1);
-    const p = (n) => String(n).padStart(2, '0');
-    return { fecha: `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`, hora: `${p(CONFIG.horaExamenes)}:00` };
+    return fechaHora(d, CONFIG.horaExamenes);
+  }
+
+  // 08:00 del día; entre 00:00 y 06:00, las 08:00 del día anterior
+  function horaIndicacionesDelTurno() {
+    const d = new Date();
+    if (d.getHours() < CONFIG.corteIndicaciones) d.setDate(d.getDate() - 1);
+    return fechaHora(d, CONFIG.horaIndicaciones);
   }
 
   function fijarCampo(el, valor) {
@@ -1332,13 +1314,12 @@
     el.blur();
   }
 
-  // Ejecuta fn con la cabecera en la próxima 06:00 y luego restaura los valores previos
-  async function conInicioProgramado(fn) {
+  // Ejecuta fn con la cabecera en `objetivo` ({ fecha, hora }) y luego restaura los valores previos
+  async function conInicioProgramado(objetivo, fn) {
     const fd = document.querySelector(SEL.inicioFecha);
     const ft = document.querySelector(SEL.inicioHora);
     if (!fd || !ft) throw new Error('no se encontraron los campos de Fecha/Hora de inicio');
     const previo = { fecha: fd.value, hora: ft.value };
-    const objetivo = proximaHoraExamenes();
     fijarCampo(fd, objetivo.fecha);
     await sleep(300);
     fijarCampo(ft, objetivo.hora);
@@ -1352,22 +1333,69 @@
     }
   }
 
-  // Agrega exámenes respetando el modo 6 AM
-  function agregarExamenesProgramados(set) {
-    revisarPaciente6am();
-    if (!modo6am) return agregarExamenes(set);
-    return conInicioProgramado((obj) => agregarExamenes(set, `programados para ${obj.fecha} ${obj.hora}`));
+  // clave: sessionStorage; titulo: para avisos ("Exámenes"); que: para el tooltip
+  function crearModoProgramado({ clave, etiqueta, titulo, que, calcular }) {
+    const m = { activo: false, episodio: null };
+    try {
+      const g = JSON.parse(sessionStorage.getItem(clave) || 'null');
+      if (g) Object.assign(m, { activo: g.activo, episodio: g.episodio });
+    } catch (e) { /* sin storage */ }
+    const guardar = () => {
+      try { sessionStorage.setItem(clave, JSON.stringify({ activo: m.activo, episodio: m.episodio })); } catch (e) { /* sin storage */ }
+    };
+    const actualizar = (b) => {
+      const { fecha, hora } = calcular();
+      b.classList.toggle('almah-activo', m.activo);
+      b.setAttribute('aria-pressed', String(m.activo));
+      b.textContent = m.activo ? `⏰ ${etiqueta} ✓ (${fecha})` : `⏰ ${etiqueta}`;
+      b.title = m.activo
+        ? `Activo (solo para este paciente): ${que} que agregues desde aquí quedan para el ${fecha} a las ${hora}. Clic para desactivar.`
+        : `Clic para programar ${que} que agregues desde aquí para las ${hora} (${fecha}).`;
+    };
+    const botones = () => document.querySelectorAll(`[data-almah-modo="${clave}"]`);
+    // Apaga el modo si cambió el paciente; devuelve true si se apagó
+    m.revisar = () => {
+      const ep = episodioActual();
+      if (!m.activo || !ep || ep === m.episodio) return false;
+      Object.assign(m, { activo: false, episodio: null });
+      guardar();
+      botones().forEach(actualizar);
+      toast(`⏰ ${etiqueta} desactivado: cambiaste de paciente`);
+      return true;
+    };
+    m.boton = () => {
+      const b = mkBtn('', '', () => {
+        m.revisar();
+        Object.assign(m, { activo: !m.activo, episodio: m.activo ? null : episodioActual() });
+        guardar();
+        botones().forEach(actualizar);
+        const { fecha, hora } = calcular();
+        toast(m.activo ? `⏰ ${titulo} se programarán para el ${fecha} a las ${hora}` : `⏰ ${titulo} con la hora actual`);
+      });
+      b.classList.add('almah-programar');
+      b.dataset.almahModo = clave;
+      actualizar(b);
+      return b;
+    };
+    // agregar(nota): agrega a la lista; con el modo activo, con la cabecera programada
+    m.agregar = (agregar) => {
+      m.revisar();
+      if (!m.activo) return agregar('');
+      return conInicioProgramado(calcular(), (obj) => agregar(`programados para ${obj.fecha} ${obj.hora}`));
+    };
+    return m;
   }
 
-  function actualizarBoton6am(b) {
-    const { fecha, hora } = proximaHoraExamenes();
-    b.classList.toggle('almah-activo', modo6am);
-    b.setAttribute('aria-pressed', String(modo6am));
-    b.textContent = modo6am ? `⏰ 6 AM ✓ (${fecha})` : '⏰ 6 AM';
-    b.title = modo6am
-      ? `Activo (solo para este paciente): los exámenes que agregues desde aquí quedan para el ${fecha} a las ${hora}. Clic para desactivar.`
-      : `Clic para programar los exámenes que agregues desde aquí para las ${hora} (${fecha}).`;
-  }
+  const modoExamenes = crearModoProgramado({
+    clave: 'almah-6am', etiqueta: '6 AM', titulo: 'Exámenes', que: 'los exámenes', calcular: proximaHoraExamenes,
+  });
+  const modoIndicaciones = crearModoProgramado({
+    clave: 'almah-8am', etiqueta: '8 AM', titulo: 'Reposo, régimen y fármacos', que: 'el reposo, régimen y fármacos',
+    calcular: horaIndicacionesDelTurno,
+  });
+
+  // Agrega exámenes respetando el modo 6 AM
+  const agregarExamenesProgramados = (set) => modoExamenes.agregar((nota) => agregarExamenes(set, nota));
 
   // Busca cada ítem (examen, indicación o fármaco) y presiona su "+" (ver agregarExamenes).
   // Nombre "específico" de un resultado: el producto (desc2, p. ej. "ENOXAPARINA JERINGA
@@ -1682,7 +1710,8 @@
       leerPrescripcionMedicamentos();
     }
     if (h.includes('OEOrder.EntryPortal')) {
-      revisarPaciente6am();
+      modoExamenes.revisar();
+      modoIndicaciones.revisar();
       filtrarBusquedaIndicaciones();
       decorarIndicaciones();
     }
@@ -1730,7 +1759,7 @@
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
-        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
+        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). <b>⏰ 8 AM</b> (junto a Fármacos) programa reposo, régimen y fármacos para las 08:00 del día; entre las 00:00 y las 06:00, para las 08:00 del día anterior. Ambos se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
       ['🧪 Laboratorios y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
@@ -1996,7 +2025,7 @@
       border: 1px solid #007067; border-radius: 4px; padding: 1px 2px; max-width: 160px; cursor: pointer; }
     .almah-examenes-titulo { font: 600 11px system-ui, sans-serif; color: #00554e; margin-right: 2px; }
     .almah-examenes .almah-set { font-weight: 700; background: #d7efec; }
-    .almah-examenes .almah-6am.almah-activo { background: #e37400; border-color: #e37400; color: #fff; font-weight: 700; }
+    .almah-examenes .almah-programar.almah-activo { background: #e37400; border-color: #e37400; color: #fff; font-weight: 700; }
     #almah-panel .almah-btn[data-accion="ocultarTerminados"] { background: #fff4e0; border-color: #e37400; color: #8a4500; }
     #almah-panel .almah-btn[data-accion="ocultarTerminados"]:hover { background: #e37400; color: #fff; }
     #almah-panel .almah-nuevo { animation: almah-pulso 1s ease-out 4; }
