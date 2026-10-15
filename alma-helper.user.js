@@ -240,6 +240,7 @@
     palabraClave: '#MREncEntry_FindList_0-item-EntrySearch',
     entradaExpandir: '[id$="-item-EntryComponent"]', // aria-expanded="true|false"
     entradaItems: 'tr[id^="MREncEntryItem_ListEncounter_"]',
+    entradasProxima: '#MREncEntry_ListEncounter_0-misc-nextPage', // "Próximo >" (25 por página)
     // Lista de entradas (Búsqueda) y su contenido expandido
     entradaRow: 'tr[id^="MREncEntry_ListEncounter_0-row-"]',
     entradaTexto: '[id$="-item-TextRepresentation"]',
@@ -988,7 +989,23 @@
     if (!(await waitFor(() => filasEntradas().length, { timeout: 15000 })))
       throw new Error('no cargó la lista de registros');
     await limpiarFiltrosBusqueda();
-    const propias = evolucionesPropias();
+    let propias = evolucionesPropias();
+    // Sin registros tuyos en la página: revisa las siguientes (la lista va de lo más nuevo a
+    // lo más antiguo) hasta encontrarlos o llegar a registros anteriores a ayer
+    const inicioAyer = new Date();
+    inicioAyer.setHours(0, 0, 0, 0);
+    inicioAyer.setDate(inicioAyer.getDate() - 1);
+    const anteriorAAyer = (row) => (parseFecha(row?.querySelector(SEL.entradaTexto)?.textContent) || inicioAyer) < inicioAyer;
+    for (let pagina = 2; !propias.length && pagina <= 5; pagina++) {
+      const filas = filasEntradas();
+      const proxima = document.querySelector(SEL.entradasProxima);
+      if (!proxima || anteriorAAyer(filas[filas.length - 1])) break;
+      toast(`Buscando tus registros en la página ${pagina}…`);
+      proxima.click();
+      if (!(await waitFor(() => filasEntradas()[0] && filasEntradas()[0] !== filas[0], { timeout: 15000 }))) break;
+      await sleep(800);
+      propias = evolucionesPropias();
+    }
     const abiertas = propias.filter((e) => candadoAbierto(e.row));
     if (!abiertas.length) {
       toast(propias.length ? 'Tus registros de hoy y de ayer ya están bloqueados 🔒' : 'No hay registros tuyos de hoy ni de ayer', false, 5000);
