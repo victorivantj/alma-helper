@@ -35,6 +35,10 @@
     // derecha). Si contiene "Médico" se muestran las funciones médicas (evolucionar,
     // barra de indicaciones…); si no, las de notas por profesión.
     perfilMedico: /m[e\u00e9]dico/i,
+    // Entre los no médicos: "CLXX.IP.Enfermería Cuidados Críticos" es enfermería; otros
+    // grupos (p. ej. "CLXX.IP.Profesionales Clínicos Hospitalizado", genérico para
+    // kinesiología, TENS…) preguntan qué registros cerrar
+    perfilEnfermeria: /enfermer/i,
     // Resultados de "Búsqueda de Indicaciones" que se ocultan. Se compara sin tildes
     // ni mayúsculas contra el nombre del ítem (expresiones regulares).
     // Cuidado con raíces muy cortas: p. ej. "pedia" también calza con "ortopedia".
@@ -500,6 +504,7 @@
     return !grupo || CONFIG.perfilMedico.test(grupo) ? 'medico' : 'otro';
   }
   const esMedico = () => perfilActual() === 'medico';
+  const esEnfermeria = () => !esMedico() && CONFIG.perfilEnfermeria.test(grupoSeguridad());
 
   // Nombre del usuario conectado (en mayúsculas); error si no se puede leer
   function usuarioConectado() {
@@ -963,7 +968,8 @@
   // Registros propios de hoy y de ayer, de cualquier tipo (evolución, nota, atención TP,
   // valoración…) y profesión. En la lista, los de hoy empiezan con la hora ("17:52 …") y
   // los de días anteriores con la fecha ("09/10/2026 …").
-  function evolucionesPropias() {
+  // `profesiones`: si se indica, solo registros de esas profesiones (p. ej. ['Enfermera (o)'])
+  function evolucionesPropias(profesiones = null) {
     const yo = usuarioConectado();
     const ayer = new Date();
     ayer.setHours(0, 0, 0, 0);
@@ -972,6 +978,7 @@
       .map((row) => {
         const texto = row.querySelector(SEL.entradaTexto)?.textContent.replace(/\s+/g, ' ').trim() || '';
         if (!texto.toUpperCase().includes(yo)) return null;
+        if (profesiones && !profesiones.some((p) => texto.includes(`(${p}`))) return null;
         const tipo = texto.includes(') -') ? texto.split(') -').pop().trim() : '';
         const hora = texto.match(/^(\d{2}:\d{2})\b/)?.[1];
         if (hora) return { row, id: row.id, dia: 'hoy', etiqueta: hora, tipo };
@@ -982,16 +989,39 @@
       .filter(Boolean);
   }
 
+  // Qué registros cerrar según el perfil: médicos, todos los propios; enfermería, los de
+  // enfermera; otros no médicos eligen kinesiología o TENS. null = cancelado.
+  async function notasACerrar() {
+    if (esMedico()) return { notas: null, nombre: '' };
+    if (esEnfermeria()) return { notas: CONFIG.notas.enfermeria, nombre: 'de enfermería ' };
+    const clave = await preguntar('¿Qué registros tuyos quieres cerrar?', [
+      { valor: 'kinesiologia', texto: '🏃 Kinesiología', tecla: 'k' },
+      { valor: 'tens', texto: '🧑‍⚕️ TENS', tecla: 't' },
+    ]);
+    if (!clave) return null;
+    return { notas: CONFIG.notas[clave], nombre: clave === 'tens' ? 'TENS ' : 'de kinesiología ' };
+  }
+
   async function cerrarEvolucion(actionBtn) {
+    const filtro = await notasACerrar();
+    if (!filtro) return;
     await abrirRegistroClinico(actionBtn);
     await abrirBusqueda();
     if (!(await waitFor(() => filasEntradas().length, { timeout: 15000 })))
       throw new Error('no cargó la lista de registros');
     await limpiarFiltrosBusqueda();
-    const propias = evolucionesPropias();
+    if (filtro.notas) {
+      // La lista filtrada por profesión trae más registros de ese tipo en la primera página
+      await aplicarFiltroProfesional(filtro.notas);
+      await sleep(1500);
+      await waitFor(() => filasEntradas().length, { timeout: 15000 });
+    }
+    const propias = evolucionesPropias(filtro.notas?.tipos);
     const abiertas = propias.filter((e) => candadoAbierto(e.row));
     if (!abiertas.length) {
-      toast(propias.length ? 'Tus registros de hoy y de ayer ya están bloqueados 🔒' : 'No hay registros tuyos de hoy ni de ayer', false, 5000);
+      toast(propias.length
+        ? `Tus registros ${filtro.nombre}de hoy y de ayer ya están bloqueados 🔒`
+        : `No hay registros tuyos ${filtro.nombre}de hoy ni de ayer`, false, 5000);
       return;
     }
     const describir = (lista) => ['hoy', 'ayer']
@@ -1755,7 +1785,7 @@
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
       ['💊 Prescripción vigente', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra lo <b>vigente</b> y lo <b>por renovar</b> según la pantalla Medicamentos (misma regla de turnos que su resaltado). Un clic en su título la pliega o despliega, y se puede arrastrar. Si aún no se ha abierto Medicamentos de ese paciente en este turno, la pestaña dice <b>abrir Medicamentos</b> y con un clic la carga.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
-      ['🔒 Cerrar evoluciones y notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
+      ['🔒 Cerrar evoluciones y notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Médicos: todos los propios; enfermería: los de enfermera; otros perfiles eligen primero <b>Kinesiología</b> o <b>TENS</b>. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
@@ -1770,7 +1800,7 @@
     fondo.id = 'almah-dialogo';
     const caja = document.createElement('div');
     caja.className = 'almah-dialogo-caja almah-ayuda';
-    caja.innerHTML = `<p>⚡ Asistente ALMA v${VERSION} · perfil ${medico ? 'médico' : 'otros profesionales'}</p>` +
+    caja.innerHTML = `<p>⚡ Asistente ALMA v${VERSION} · perfil ${medico ? 'médico' : esEnfermeria() ? 'enfermería' : 'otros profesionales'}</p>` +
       '<small class="almah-grupo"></small>' +
       secciones.map(([titulo, html]) => `<h4>${titulo}</h4>${html}`).join('') +
       '<small>El script no guarda nada por ti: toda indicación o nota se revisa y se guarda en ALMA como siempre.</small>' +
