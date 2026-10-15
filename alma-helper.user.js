@@ -553,11 +553,23 @@
   // ---------------------------------------------------------------------------
   // Ver documento desde la lista de "Imágenes y Documentos del Paciente"
   // ---------------------------------------------------------------------------
-  // ALMA no expone la dirección del archivo en la lista: se obtiene al pulsar "Ver
-  // documento" en su página de detalle (websys.csp?TUID=…, sigue sirviendo después). El
-  // botón 👁 hace ese recorrido tapado por un aviso, vuelve a la lista y muestra el
+  // ALMA no expone la dirección del archivo en la lista. Al abrir la página de detalle, el
+  // servidor la entrega (websys.csp?TUID=…, sigue sirviendo después) y ALMA hace una
+  // consulta liviana (solo encabezados) para saber el tipo de archivo; esa consulta queda en
+  // el registro de recursos del navegador, de donde se lee sin pulsar "Ver documento".
+  // El botón 👁 hace el recorrido tapado por un aviso, vuelve a la lista y muestra el
   // documento en una ventana flotante. Las direcciones se recuerdan solo en memoria.
   const direccionesDocs = new Map(); // número de "Archivo Imagen" → dirección del documento
+  let ultimaConsultaDoc = null; // { url, t } de la última consulta de ALMA a websys.csp
+  try {
+    new PerformanceObserver((lista) => {
+      lista.getEntries().forEach((e) => {
+        if (/\/websys\.csp\?/.test(e.name) && /xmlhttprequest|fetch/.test(e.initiatorType)) {
+          ultimaConsultaDoc = { url: e.name, t: performance.now() };
+        }
+      });
+    }).observe({ type: 'resource' });
+  } catch (e) { /* navegador sin PerformanceObserver: se usa "Ver documento" */ }
 
   function decorarDocumentos() {
     document.querySelectorAll(SEL.docFila).forEach((row) => {
@@ -587,18 +599,24 @@
       try {
         const marco = () => document.getElementById(SEL.docMarco)?.contentDocument;
         const anterior = marco()?.location.href;
+        const desde = performance.now();
         row.querySelector(SEL.docLink).click();
         const ver = await waitFor(SEL.docVer, { timeout: 20000 });
         if (!ver) throw new Error('no se abrió la página del documento');
-        ver.click();
-        const url = await waitFor(() => {
-          const d = marco();
-          const href = d?.location.href;
-          return href && /websys\.csp/.test(href) && href !== anterior && d.readyState !== 'loading' ? href : null;
-        }, { timeout: 30000 });
+        // Dirección que ALMA consultó al abrir el detalle (sin descargar el documento)
+        let url = (await waitFor(() => (ultimaConsultaDoc?.t > desde ? ultimaConsultaDoc.url : null), { timeout: 6000 })) || null;
+        if (!url) {
+          // Respaldo: pulsar "Ver documento" y tomar la dirección del marco de ALMA
+          ver.click();
+          url = await waitFor(() => {
+            const d = marco();
+            const href = d?.location.href;
+            return href && /websys\.csp/.test(href) && href !== anterior && d.readyState !== 'loading' ? href : null;
+          }, { timeout: 30000 });
+        }
         if (!url) throw new Error('no se pudo obtener el documento');
         direccionesDocs.set(numero, url);
-        // Vuelve a la lista: visor → detalle → lista
+        // Vuelve a la lista (detalle → lista, o visor → detalle → lista con el respaldo)
         for (let i = 0; i < 3 && !document.querySelector(SEL.docLink); i++) {
           history.back();
           await waitFor(() => document.querySelector(SEL.docLink) || (i === 0 && document.querySelector(SEL.docVer)), { timeout: 15000 });
