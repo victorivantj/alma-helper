@@ -145,9 +145,9 @@
         { buscar: 'creatinquinasa', nombre: 'Creatinquinasa CK - MB' },
       ] },
     ],
-    // Botón "⏰ 6 AM": hora a la que se programan los exámenes (si ya pasó hoy, mañana)
+    // Botón "🧪 Lab 6 AM": hora a la que se programan los exámenes (si ya pasó hoy, mañana)
     horaExamenes: 6,
-    // Botón "⏰ 8 AM" (reposo, régimen y fármacos): las 08:00 del día; antes de las 06:00,
+    // Botón "⏰ Receta 8 AM" (reposo, régimen y fármacos): las 08:00 del día; antes de las 06:00,
     // las 08:00 del día anterior (la receta del turno que sigue en curso)
     horaIndicaciones: 8,
     corteIndicaciones: 6,
@@ -1211,7 +1211,7 @@
     [...document.querySelectorAll(SEL.pendienteRow)].filter((r) => /-row-\d+$/.test(r.id) && isVisible(r));
 
   // Menú desplegable agrupado. Cada opción es un ítem { titulo, buscar, nombre|producto, via? }
-  // `modo`: modo programado (⏰ 6 AM / ⏰ 8 AM) que se respeta al agregar
+  // `modo`: modo programado (🧪 Lab 6 AM / ⏰ Receta 8 AM) que se respeta al agregar
   function crearMenu(titulo, grupos, { modo = null } = {}) {
     const sel = document.createElement('select');
     sel.className = 'almah-select';
@@ -1281,7 +1281,7 @@
     fila.after(bar);
   }
 
-  // ---- Programar a una hora fija: ⏰ 6 AM (exámenes) y ⏰ 8 AM (reposo, régimen, fármacos) ----
+  // ---- Programar a una hora fija: 🧪 Lab 6 AM (exámenes) y ⏰ Receta 8 AM (reposo, régimen, fármacos) ----
   // Los campos "Fecha de Inicio"/"Hora Inicio" de la cabecera se aplican a lo que se
   // agregue DESPUÉS (no cambian lo que ya está en la lista): se fijan, se agrega y se
   // restauran. Cada modo se mantiene mientras sigas en el mismo paciente (N° de episodio);
@@ -1334,6 +1334,7 @@
   }
 
   // clave: sessionStorage; titulo: para avisos ("Exámenes"); que: para el tooltip
+  // etiqueta: texto del botón ("🧪 Lab 6 AM"); activo agrega la fecha corta ("✓ 16/10")
   function crearModoProgramado({ clave, etiqueta, titulo, que, calcular }) {
     const m = { activo: false, episodio: null };
     try {
@@ -1347,7 +1348,7 @@
       const { fecha, hora } = calcular();
       b.classList.toggle('almah-activo', m.activo);
       b.setAttribute('aria-pressed', String(m.activo));
-      b.textContent = m.activo ? `⏰ ${etiqueta} ✓ (${fecha})` : `⏰ ${etiqueta}`;
+      b.textContent = m.activo ? `${etiqueta} ✓ ${fecha.slice(0, 5)}` : etiqueta;
       b.title = m.activo
         ? `Activo (solo para este paciente): ${que} que agregues desde aquí quedan para el ${fecha} a las ${hora}. Clic para desactivar.`
         : `Clic para programar ${que} que agregues desde aquí para las ${hora} (${fecha}).`;
@@ -1360,7 +1361,7 @@
       Object.assign(m, { activo: false, episodio: null });
       guardar();
       botones().forEach(actualizar);
-      toast(`⏰ ${etiqueta} desactivado: cambiaste de paciente`);
+      toast(`${etiqueta} desactivado: cambiaste de paciente`);
       return true;
     };
     m.boton = () => {
@@ -1370,7 +1371,7 @@
         guardar();
         botones().forEach(actualizar);
         const { fecha, hora } = calcular();
-        toast(m.activo ? `⏰ ${titulo} se programarán para el ${fecha} a las ${hora}` : `⏰ ${titulo} con la hora actual`);
+        toast(m.activo ? `${etiqueta}: ${titulo} se programarán para el ${fecha} a las ${hora}` : `${etiqueta} desactivado: ${titulo.toLowerCase()} con la hora actual`);
       });
       b.classList.add('almah-programar');
       b.dataset.almahModo = clave;
@@ -1387,10 +1388,10 @@
   }
 
   const modoExamenes = crearModoProgramado({
-    clave: 'almah-6am', etiqueta: '6 AM', titulo: 'Exámenes', que: 'los exámenes', calcular: proximaHoraExamenes,
+    clave: 'almah-6am', etiqueta: '🧪 Lab 6 AM', titulo: 'Exámenes', que: 'los exámenes', calcular: proximaHoraExamenes,
   });
   const modoIndicaciones = crearModoProgramado({
-    clave: 'almah-8am', etiqueta: '8 AM', titulo: 'Reposo, régimen y fármacos', que: 'el reposo, régimen y fármacos',
+    clave: 'almah-8am', etiqueta: '⏰ Receta 8 AM', titulo: 'Reposo, régimen y fármacos', que: 'el reposo, régimen y fármacos',
     calcular: horaIndicacionesDelTurno,
   });
 
@@ -1759,7 +1760,7 @@
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
-        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). <b>⏰ 8 AM</b> (junto a Fármacos) programa reposo, régimen y fármacos para las 08:00 del día; entre las 00:00 y las 06:00, para las 08:00 del día anterior. Ambos se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
+        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>🧪 Lab 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). <b>⏰ Receta 8 AM</b> (junto a Fármacos) programa reposo, régimen y fármacos para las 08:00 del día; entre las 00:00 y las 06:00, para las 08:00 del día anterior. Ambos se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
       ['🧪 Laboratorios y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
