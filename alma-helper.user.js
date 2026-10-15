@@ -270,6 +270,12 @@
     pendienteRow: 'tr[id^="OEOrder_Entry_List_0-row-"]', // lista de indicaciones por guardar
     inicioFecha: '#OEOrder_Entry_0-item-OEORISttDat', // "Fecha de Inicio" para lo que se agregue
     inicioHora: '#OEOrder_Entry_0-item-OEORISttTim',
+    // Imágenes y Documentos del Paciente: número de "Archivo Imagen" (abre "Detalles del
+    // Documento") y, en esa página, "Ver documento" (muestra el PDF en el marco TRAK_main)
+    docFila: 'tr[id^="MRPictures_ListEPR_"]',
+    docLink: '[id$="-item-PIC_Path-link"]',
+    docVer: '#MRPictures_Edit_0-item-ViewDocument-link',
+    docMarco: 'TRAK_main',
     bannerNombre: '#PAPerson_Banner-row-0-item-BANNERName2',
   };
 
@@ -543,6 +549,99 @@
     abrirSubpestanaRCE('Documentos e Imágenes', 'Imágenes y Documentos del Paciente', actionBtn);
   const examenes = (actionBtn) =>
     abrirSubpestanaRCE('Laboratorio', 'Resultados de Laboratorio - Atencion Actual', actionBtn);
+
+  // ---------------------------------------------------------------------------
+  // Ver documento desde la lista de "Imágenes y Documentos del Paciente"
+  // ---------------------------------------------------------------------------
+  // ALMA no expone la dirección del archivo en la lista: se obtiene al pulsar "Ver
+  // documento" en su página de detalle (websys.csp?TUID=…, sigue sirviendo después). El
+  // botón 👁 hace ese recorrido tapado por un aviso, vuelve a la lista y muestra el
+  // documento en una ventana flotante. Las direcciones se recuerdan solo en memoria.
+  const direccionesDocs = new Map(); // número de "Archivo Imagen" → dirección del documento
+
+  function decorarDocumentos() {
+    document.querySelectorAll(SEL.docFila).forEach((row) => {
+      if (!/-row-\d+$/.test(row.id) || row.querySelector('.almah-ver-doc')) return;
+      const link = row.querySelector(SEL.docLink);
+      if (!link) return;
+      const b = mkBtn('👁 Ver', 'Ver el documento aquí, sin abrir su página', () =>
+        run('Ver documento', () => verDocumento(row.id)));
+      b.classList.add('almah-ver-doc');
+      link.after(b);
+    });
+  }
+
+  const textoCelda = (row, item) => row.querySelector(`[id$="-item-${item}"]`)?.textContent.trim() || '';
+
+  async function verDocumento(filaId) {
+    let row = document.getElementById(filaId);
+    const numero = row?.querySelector(SEL.docLink)?.textContent.trim();
+    if (!numero) throw new Error('no se encontró el documento en la lista');
+    const titulo = [textoCelda(row, 'PIC_Desc'), textoCelda(row, 'PICDocType'),
+      `${textoCelda(row, 'PIC_DateCreated')} ${textoCelda(row, 'PIC_TimeCreated')}`.trim()].filter(Boolean).join(' · ');
+    if (!direccionesDocs.has(numero)) {
+      const cortina = document.createElement('div');
+      cortina.id = 'almah-cortina';
+      cortina.textContent = '📄 Abriendo documento…';
+      document.body.appendChild(cortina);
+      try {
+        const marco = () => document.getElementById(SEL.docMarco)?.contentDocument;
+        const anterior = marco()?.location.href;
+        row.querySelector(SEL.docLink).click();
+        const ver = await waitFor(SEL.docVer, { timeout: 20000 });
+        if (!ver) throw new Error('no se abrió la página del documento');
+        ver.click();
+        const url = await waitFor(() => {
+          const d = marco();
+          const href = d?.location.href;
+          return href && /websys\.csp/.test(href) && href !== anterior && d.readyState !== 'loading' ? href : null;
+        }, { timeout: 30000 });
+        if (!url) throw new Error('no se pudo obtener el documento');
+        direccionesDocs.set(numero, url);
+        // Vuelve a la lista: visor → detalle → lista
+        for (let i = 0; i < 3 && !document.querySelector(SEL.docLink); i++) {
+          history.back();
+          await waitFor(() => document.querySelector(SEL.docLink) || (i === 0 && document.querySelector(SEL.docVer)), { timeout: 15000 });
+          await sleep(300);
+        }
+      } finally {
+        cortina.remove();
+      }
+    }
+    mostrarVisorDocumento(direccionesDocs.get(numero), titulo || `Documento ${numero}`);
+  }
+
+  function mostrarVisorDocumento(url, titulo) {
+    document.getElementById('almah-visor')?.remove();
+    const fondo = document.createElement('div');
+    fondo.id = 'almah-visor';
+    const caja = document.createElement('div');
+    caja.className = 'almah-visor-caja';
+    const barra = document.createElement('div');
+    barra.className = 'almah-visor-barra';
+    const t = document.createElement('span');
+    t.textContent = `📄 ${titulo}`;
+    const nueva = mkBtn('↗ Pestaña nueva', 'Abrir el documento en una pestaña nueva', () => window.open(url, '_blank', 'noopener'));
+    const cerrarBtn = mkBtn('✕', 'Cerrar (Esc)', () => cerrar());
+    barra.append(t, nueva, cerrarBtn);
+    const marco = document.createElement('iframe');
+    marco.src = url;
+    caja.append(barra, marco);
+    fondo.appendChild(caja);
+    const teclas = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      cerrar();
+    };
+    const cerrar = () => {
+      document.removeEventListener('keydown', teclas, true);
+      fondo.remove();
+    };
+    document.addEventListener('keydown', teclas, true);
+    fondo.addEventListener('click', (e) => e.target === fondo && cerrar());
+    document.body.appendChild(fondo);
+  }
 
   // ---------------------------------------------------------------------------
   // Evolucionar: copia la evolución más reciente de otro médico
@@ -1558,6 +1657,7 @@
   function decorarTodo() {
     const h = location.hash;
     if (h.startsWith('#/Floorplan')) decorarCamas();
+    if (document.querySelector(SEL.docLink)) decorarDocumentos();
     if (document.querySelector(SEL.ordenRow)) {
       aplicarFiltroMeds();
       resaltarMedicamentos();
@@ -1574,7 +1674,7 @@
 
   // Deja ALMA como sin el script: quita botones, barras, resaltados y filtros
   function limpiarTodo() {
-    document.querySelectorAll('.almah-bedbar, .almah-examenes, .almah-aviso, .almah-badge, .almah-filtro-meds').forEach((e) => e.remove());
+    document.querySelectorAll('.almah-bedbar, .almah-examenes, .almah-aviso, .almah-badge, .almah-filtro-meds, .almah-ver-doc').forEach((e) => e.remove());
     document.querySelectorAll('.almah-oculto, .almah-filtrada').forEach((e) => e.classList.remove('almah-oculto', 'almah-filtrada'));
     document.querySelectorAll('[data-almah-med]').forEach((e) => e.removeAttribute('data-almah-med'));
     document.documentElement.classList.remove('almah-sin-filtro-meds');
@@ -1957,6 +2057,18 @@
       padding: 8px 10px; font-size: 14px; text-align: left; }
     #almah-dialogo .almah-btn small { display: block; font-weight: 400; color: #5f6368; margin-top: 2px; }
     #almah-dialogo .almah-btn:hover small { color: #e8f4f3; }
+    .almah-ver-doc { margin-left: 6px; }
+    #almah-cortina { position: fixed; inset: 0; z-index: 100002; background: rgba(255,255,255,.92);
+      display: flex; align-items: center; justify-content: center; font: 600 18px system-ui, sans-serif; color: #00554e; }
+    #almah-visor { position: fixed; inset: 0; z-index: 100001; background: rgba(0,0,0,.45);
+      display: flex; align-items: center; justify-content: center; }
+    #almah-visor .almah-visor-caja { width: min(1100px, 94vw); height: 92vh; background: #fff; border-radius: 8px;
+      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.3); }
+    #almah-visor .almah-visor-barra { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+      background: #007067; color: #fff; font: 600 13px system-ui, sans-serif; }
+    #almah-visor .almah-visor-barra span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #almah-visor .almah-visor-barra .almah-btn { background: #fff; }
+    #almah-visor iframe { flex: 1; border: 0; width: 100%; }
     #almah-dialogo .almah-detalle { margin: 0 0 4px; padding-left: 20px; font-size: 13px; color: #333; max-height: 30vh; overflow-y: auto; }
     #almah-dialogo .almah-cancelar { justify-content: center; background: #f1f3f4; border-color: #9aa0a6; color: #333; }
   `;
