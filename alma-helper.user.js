@@ -211,6 +211,7 @@
       medicamentos: { alt: true, key: 'm' },
       documentos: { alt: true, key: 'o' },
       examenes: { alt: true, key: 'l' },
+      signosVitales: { alt: true, key: 'v' },
       ocultarTerminados: { alt: true, key: 't' },
       togglePanel: { alt: true, key: 'a' },
     },
@@ -554,6 +555,8 @@
     abrirSubpestanaRCE('Documentos e Imágenes', 'Imágenes y Documentos del Paciente', actionBtn);
   const examenes = (actionBtn) =>
     abrirSubpestanaRCE('Laboratorio', 'Resultados de Laboratorio - Atencion Actual', actionBtn);
+  const signosVitales = (actionBtn) =>
+    abrirSubpestanaRCE('Parámetros Clínicos', 'Signos Vitales (v)', actionBtn);
 
   // ---------------------------------------------------------------------------
   // Ver documento desde la lista de "Imágenes y Documentos del Paciente"
@@ -1522,6 +1525,9 @@
         ),
         mkBtn('📄 Docs', 'Imágenes y documentos del paciente', () =>
           run('Documentos', () => documentos(actionBtn))
+        ),
+        mkBtn('📈 Signos vit.', 'Signos vitales (Parámetros Clínicos)', () =>
+          run('Signos vitales', () => signosVitales(actionBtn))
         )
       );
       if (!esMedico()) {
@@ -1571,6 +1577,7 @@
     { id: 'medicamentos', label: '💊 Medicamentos', fn: () => medicamentos() },
     { id: 'examenes', label: '🧪 Laboratorios', fn: () => examenes() },
     { id: 'documentos', label: '📄 Documentos', fn: () => documentos() },
+    { id: 'signosVitales', label: '📈 Signos vitales', fn: () => signosVitales() },
     // soloEn: el botón aparece (resaltado) solo cuando la función devuelve true
     { id: 'ocultarTerminados', label: '👁️ Ocultar terminados', fn: async () => toggleTerminados(),
       soloEn: () => filtroMeds && !!document.querySelector(SEL.ordenRow) },
@@ -1781,6 +1788,7 @@
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
       ['🧪 Laboratorios y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
+      ['📈 Signos vitales', `<p><kbd>${t('signosVitales')}</kbd> Abre Parámetros Clínicos → Signos Vitales (v).</p>`],
     ].filter(Boolean);
 
     const fondo = document.createElement('div');
