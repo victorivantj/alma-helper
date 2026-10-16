@@ -361,7 +361,7 @@
   // guardan sin valores (salvo el nombre del componente o pantalla), nunca datos del paciente.
   // En la consola: almahMedicion() muestra el total por acción; almahMedicionReiniciar()
   // lo borra; almahEtiqueta('Notas a mano') etiqueta lo que hagas a mano, para comparar.
-  const medicion = { activa: false, accion: null, registros: [] };
+  const medicion = { activa: false, accion: null, registros: [], delScript: [] }; // delScript: URL pedidas por el script
   try { medicion.activa = localStorage.getItem('almah-debug') === '1'; } catch (e) { /* sin storage */ }
 
   function rutaSegura(url) {
@@ -372,6 +372,13 @@
   }
 
   const kb = (bytes) => Math.round(bytes / 102.4) / 10;
+  // ¿La pidió el script (postRouter)? Cada URL anotada se usa una sola vez
+  function tomarDelScript(url) {
+    const i = medicion.delScript.findIndex((u) => url.endsWith(u));
+    if (i < 0) return false;
+    medicion.delScript.splice(i, 1);
+    return true;
+  }
   function resumenMedicion(registros) {
     const porRuta = {};
     registros.forEach((r) => {
@@ -389,7 +396,7 @@
         if (!e.name.startsWith(location.origin) || /\.(js|css|png|gif|svg|jpe?g|woff2?|ico)(\?|$)/.test(e.name)) return;
         medicion.registros.push({
           t: Date.now(), accion: medicion.accion || '(ALMA, sin acción del script)', ruta: rutaSegura(e.name),
-          kb: kb(e.transferSize || 0), quien: e.initiatorType === 'fetch' ? 'script' : 'ALMA',
+          kb: kb(e.transferSize || 0), quien: tomarDelScript(e.name) ? 'script' : 'ALMA',
         });
       })).observe({ type: 'resource' });
     } catch (e) { /* sin PerformanceObserver */ }
@@ -1842,6 +1849,7 @@
   const textoHtml = (h) => new DOMParser().parseFromString(String(h ?? ''), 'text/html').body.textContent.replace(/\s+/g, ' ').trim();
 
   async function postRouter(url, campos) {
+    if (medicion.activa) medicion.delScript.push(url);
     const fd = new FormData();
     campos.forEach(([k, v]) => fd.append(k, v));
     const r = await fetch(url, {
