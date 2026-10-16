@@ -158,11 +158,14 @@
       chartId: 'wZgJ17zHeXMe7_79KnTXFg',
       chart: '1061',
       vigenciaMin: 30, // no se vuelven a pedir si se consultaron hace menos
-      atrasoMin: 120,  // en unidades críticas, aviso si el último control completo es más antiguo
-      // Unidades críticas (nombre sin tildes, minúsculas): UPC, UCI, UTI, UTIP, intensivos,
-      // intermedios, críticos; menos cuidados intensivos psiquiátricos
-      unidadCritica: /\b(upc|uci|uti|utip)\b|intensiv|intermedi|critic/,
-      unidadNoCritica: /psiquiatr/,
+      // Aviso si el último control completo es más antiguo que esto (minutos), según el
+      // nivel de la cama: tipo de cama del mapa ("Cama Critica - UCI" / "Cama Crítica - UTI")
+      // o, si no se conoce, el nombre de la unidad. Las salas no tienen aviso.
+      atrasoMin: { uci: 120, uti: 240 },
+      // Nombre sin tildes, minúsculas. Se revisa UTI primero (UTIP, intermedios).
+      nivelUti: /\b(uti|utip)\b|intermedi/,
+      nivelUci: /\b(uci|upc)\b|intensiv|critic/,
+      nivelNinguno: /psiquiatr/,
     },
     // Resto de exámenes: menú "Otros exámenes ▾" agrupado
     otrosExamenes: [
@@ -297,6 +300,7 @@
     docMarco: 'TRAK_main',
     bannerNombre: '#PAPerson_Banner-row-0-item-BANNERName2',
     bedNombre: '[id$="-patient-dataHeader-0-dataItem-0"]', // nombre del paciente en la cama
+    bedTipo: '[id$="-header-typeIcon"]', // ícono con title "Cama Critica - UCI" / "Cama Crítica - UTI"
     bannerUnidad: '#PAPerson_Banner-row-0-item-BANNERWARDDesc', // "UPC CORONARIA - HSJD"
   };
 
@@ -1827,10 +1831,18 @@
     return cargando;
   }
 
-  function esUnidadCritica(nombreUnidad) {
-    const u = sinTildes(nombreUnidad || '');
-    return CONFIG.signosVitales.unidadCritica.test(u) && !CONFIG.signosVitales.unidadNoCritica.test(u);
+  // 'uci' | 'uti' | null (sala) a partir de un texto: tipo de cama o nombre de la unidad
+  function nivelCritico(texto) {
+    const t = sinTildes(texto || '');
+    const cfg = CONFIG.signosVitales;
+    if (!t || cfg.nivelNinguno.test(t)) return null;
+    if (cfg.nivelUti.test(t)) return 'uti';
+    return cfg.nivelUci.test(t) ? 'uci' : null;
   }
+  // Tipo de cama visto en el mapa, por paciente (para usarlo luego en su ficha)
+  const nivelPorPaciente = new Map();
+  const nivelDeCama = (bed) => nivelCritico(bed.querySelector(SEL.bedTipo)?.getAttribute('title')) ||
+    nivelCritico(unidadVisible());
   // Unidad del paciente (encabezado de la ficha); en el mapa, la del mapa
   const unidadVisible = () => document.querySelector(SEL.bannerUnidad)?.textContent.trim() ||
     (location.hash.startsWith('#/Floorplan') ? document.title.split(':')[0] : window.sessionData?.logonData?.locDesc) || '';
@@ -1850,8 +1862,8 @@
   }).join(' · ');
 
   // Última toma y, si le falta FC o PA (registro parcial, p. ej. por un evento), el control
-  // completo anterior. `atrasada`: en unidad crítica, el último control completo tiene > atrasoMin.
-  function resumenSignos(e, critica) {
+  // completo anterior. `atrasada`: en cama UCI/UTI, el último control completo tiene > atrasoMin.
+  function resumenSignos(e, nivel) {
     const ultima = e.tomas[0];
     if (!ultima) return { lineas: [], atrasada: false };
     const lineas = [ultima];
@@ -1860,17 +1872,18 @@
       if (previa) lineas.push(previa);
     }
     const ref = e.tomas.find(completa) || ultima;
-    return { lineas, atrasada: critica && Date.now() - ref.t > CONFIG.signosVitales.atrasoMin * 60000 };
+    const limite = nivel && CONFIG.signosVitales.atrasoMin[nivel];
+    return { lineas, atrasada: !!limite && Date.now() - ref.t > limite * 60000, limite };
   }
 
-  function lineaToma(toma, atrasada, parcial) {
+  function lineaToma(toma, atrasada, parcial, limite) {
     const div = document.createElement('div');
     div.className = 'almah-sv-linea';
     const h = document.createElement('b');
     h.textContent = horaCorta(toma.t);
     if (atrasada) {
       h.classList.add('almah-sv-atrasada');
-      h.title = `Último control completo hace más de ${CONFIG.signosVitales.atrasoMin / 60} h`;
+      h.title = `Último control completo hace más de ${limite / 60} h`;
     }
     div.append(h, ` ${textoToma(toma)}${parcial ? ' (parcial)' : ''}`);
     return div;
@@ -1913,9 +1926,10 @@
       b.classList.add('almah-sv-todas');
       titulo.appendChild(b);
     }
-    const critica = esUnidadCritica(unidadVisible());
     document.querySelectorAll(SEL.bed).forEach((bed) => {
       const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
+      const nivel = nombre ? nivelDeCama(bed) : null;
+      if (nombre) nivelPorPaciente.set(nombre, nivel);
       const e = nombre && signos.get(nombre);
       let caja = bed.querySelector('.almah-sv');
       if (!e) {
@@ -1936,8 +1950,8 @@
       else if (e.error && !e.tomas.length) caja.append(`📈 No se pudieron cargar (${e.error})`);
       else if (!e.tomas.length) caja.append('📈 Sin signos vitales registrados');
       else {
-        const { lineas, atrasada } = resumenSignos(e, critica);
-        lineas.forEach((t, i) => caja.append(lineaToma(t, atrasada && i === lineas.length - 1, !completa(t))));
+        const { lineas, atrasada, limite } = resumenSignos(e, nivel);
+        lineas.forEach((t, i) => caja.append(lineaToma(t, atrasada && i === lineas.length - 1, !completa(t), limite)));
       }
       if (!e.cargando) {
         const pie = document.createElement('div');
@@ -1986,21 +2000,24 @@
       document.body.appendChild(win);
       window.addEventListener('resize', () => posicionSV(win));
     }
-    const critica = esUnidadCritica(unidadVisible());
-    const clave = `${nombre}|${e.cargando ? 'c' : ''}|${e.consultado}|${e.error || ''}|${critica}|${Math.floor((Date.now() - e.consultado) / 60000)}`;
+    const nivel = nivelPorPaciente.has(nombre) ? nivelPorPaciente.get(nombre) : nivelCritico(unidadVisible());
+    const clave = `${nombre}|${e.cargando ? 'c' : ''}|${e.consultado}|${e.error || ''}|${nivel}|${Math.floor((Date.now() - e.consultado) / 60000)}`;
     win.hidden = false;
     win.classList.toggle('almah-collapsed', svPlegado);
     if (win.dataset.clave !== clave) {
       win.dataset.clave = clave;
       const head = win.querySelector('.almah-sv-head');
       const cuerpo = win.querySelector('.almah-sv-cuerpo');
-      const { lineas, atrasada } = resumenSignos(e, critica);
+      const { lineas, atrasada, limite } = resumenSignos(e, nivel);
       head.replaceChildren();
       const titulo = document.createElement('span');
       titulo.textContent = '📈 Signos vitales';
       const info = document.createElement('small');
       info.textContent = e.cargando ? 'cargando…' : lineas[0] ? `última toma ${horaCorta(lineas[0].t)}` : '';
-      if (atrasada) info.classList.add('almah-sv-atrasada');
+      if (atrasada) {
+        info.classList.add('almah-sv-atrasada');
+        info.title = `Último control completo hace más de ${limite / 60} h (cama ${nivel.toUpperCase()})`;
+      }
       const flecha = document.createElement('span');
       flecha.className = 'almah-meds-flecha';
       head.append(titulo, info, flecha);
