@@ -1793,15 +1793,19 @@
   }
 
   // Tomas (más nueva primero): [{ t: Date, v: { FC: '82', PA: '120/70', … } }]
+  // Se usa ObsDataWithLatest: igual a ObsData pero con la toma más reciente al inicio (ObsData
+  // puede no incluirla aún; p. ej. termina a las 19:00 cuando ya hay un registro de las 20:48).
   function tomasDeRespuesta(cd) {
     const filas = (cd?.listRows || []).filter((f) => !f.ObsItem?.hiddenItem);
-    const captions = cd?.listDynColumnSettings?.ObsData?.captions || [];
+    const dyn = cd?.listDynColumnSettings || {};
+    const campo = dyn.ObsDataWithLatest?.captions?.length ? 'ObsDataWithLatest' : 'ObsData';
+    const captions = dyn[campo]?.captions || [];
     const porParam = SV.map((p) => ({ p, fila: filas.find((f) => p.re.test(sinTildes(textoHtml(f.ObsItem?.value)))) }));
     return captions.map((cap, i) => {
       const m = textoHtml(cap).match(/(\d{2})\/(\d{2})\/(\d{4})\D+(\d{1,2}):(\d{2})/);
       const v = {};
       porParam.forEach(({ p, fila }) => {
-        const val = fila && textoHtml(fila.ObsData?.[i]?.value);
+        const val = fila && textoHtml(fila[campo]?.[i]?.value);
         if (val) v[p.c] = p.f ? p.f(val) : val;
       });
       return m && Object.keys(v).length ? { t: new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]), v } : null;
