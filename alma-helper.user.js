@@ -170,26 +170,86 @@
       nivelUci: /\b(uci|upc)\b|intensiv|critic/,
       nivelNinguno: /psiquiatr/,
     },
-    // Resto de exámenes: menú "Otros exámenes ▾" agrupado
-    otrosExamenes: [
-      { grupo: 'Hematología', items: [
+    // Menús de exámenes por grupo (uno por grupo, en la barra "Exámenes:"). Cada opción agrega
+    // un ítem ({ titulo, buscar, nombre }) o varios ({ titulo, items: [...] }). Los nombres son
+    // los de ALMA (se compara sin tildes ni mayúsculas: igual o el inicio del nombre).
+    examenesGrupos: [
+      { titulo: 'Perfiles', items: [
+        { titulo: 'Perfil bioquímico', buscar: 'perfil bioq', nombre: 'Perfil Bioquímico' },
+        { titulo: 'Perfil hepático', buscar: 'perfil hep', nombre: 'Perfil Hepático' },
+        { titulo: 'Perfil lipídico', buscar: 'perfil lip', nombre: 'Perfil lipídico' },
+        { titulo: 'Perfil renal', buscar: 'perfil renal', nombre: 'PERFIL RENAL' },
+        { titulo: 'PCR', buscar: 'Proteina C Reactiva', nombre: 'Proteina C Reactiva' },
+      ] },
+      { titulo: 'Cardiaco', items: [
+        { titulo: 'Troponina', buscar: 'troponina', nombre: 'Troponina' },
+        { titulo: 'CK total', buscar: 'creatinquinasa', nombre: 'Creatinquinasa CK - total' },
+        { titulo: 'CK MB', buscar: 'creatinquinasa', nombre: 'Creatinquinasa CK - MB' },
+        { titulo: 'NT-proBNP', buscar: 'probnp', nombre: 'NT- PROBNP' },
+      ] },
+      { titulo: 'Hemato', items: [
         { titulo: 'Hemograma', buscar: 'hemograma', nombre: 'Hemograma' },
+        { titulo: 'VHS', buscar: 'vhs', nombre: 'Velocidad de eritrosedimentación' },
+        { titulo: 'Cinética de hierro (cap. fijación + transferrina)', items: [
+          { buscar: 'hierro,', nombre: 'CAPACIDAD FIJACIÓN DEL HIERRO' },
+          { buscar: 'transferrina', nombre: 'Transferrina' },
+        ] },
+        { titulo: 'Ferritina', buscar: 'ferritina', nombre: 'FERRITINA' },
         { titulo: 'TP/INR', buscar: 'protrombina', nombre: 'Tiempo de protrombina' },
         { titulo: 'TTPA', buscar: 'tromboplastina', nombre: 'Tromboplastina, tiempo parcial' },
       ] },
-      { grupo: 'Bioquímica', items: [
-        { titulo: 'PCR', buscar: 'Proteina C Reactiva', nombre: 'Proteina C Reactiva' },
-        { titulo: 'Perfil bioquímico', buscar: 'perfil bioq', nombre: 'Perfil Bioquímico' },
-        { titulo: 'Perfil renal', buscar: 'perfil renal', nombre: 'PERFIL RENAL' },
-        { titulo: 'Perfil hepático', buscar: 'perfil hepático', nombre: 'Perfil Hepático' },
-        { titulo: 'Perfil lipídico', buscar: 'colesterol', nombre: 'Perfil lipídico' },
-      ] },
-      { grupo: 'Endocrino', items: [
-        { titulo: 'HbA1c', buscar: 'hemoglobina glic', nombre: 'Hemoglobina glicada A1c' },
+      { titulo: 'Endocrino', items: [
         { titulo: 'TSH', buscar: 'tsh', nombre: 'Tiroestimulante (TSH)' },
+        { titulo: 'T4 libre', buscar: 'tiroxina', nombre: 'Tiroxina libre (T4L)' },
+        { titulo: 'HbA1c', buscar: 'glicada', nombre: 'Hemoglobina glicada A1c' },
+        { titulo: 'Cortisol', buscar: 'cortisol', nombre: 'CORTISOL' },
       ] },
-      { grupo: 'Gases', items: [
+      { titulo: 'Nefro/HE', items: [
+        { titulo: 'Electrolitos', buscar: 'electrolitos', nombre: 'Electrolitos plasmáticos' },
+        { titulo: 'Gases venosos', buscar: 'gases', nombre: 'GASES VENOSOS' },
         { titulo: 'Gases arteriales (incluye lactato)', buscar: 'gases', nombre: 'Gases arteriales' },
+      ] },
+      { titulo: 'Microbiológico', items: [
+        { titulo: 'Hemocultivo periférico', buscar: 'hemocultivo', nombre: 'Hemocultivo periferico' },
+        { titulo: 'Hemocultivo arrastre', buscar: 'hemocultivo', nombre: 'Hemocultivo arrastre' },
+        { titulo: 'Baciloscopía expectoración', buscar: 'baciloscop', nombre: 'BACILOSCOPIA EN EXPECTORACIÓN' },
+        { titulo: 'Cultivo aspirado traqueal', buscar: 'cultivo corriente', nombre: 'CULTIVO CORRIENTE/ASPIRADO TRAQUEAL' },
+        { titulo: 'Cultivo líquido pleural', buscar: 'cultivo corriente/liquido p', nombre: 'CULTIVO CORRIENTE/LIQUIDO PLEURAL' },
+        { titulo: 'Cultivo líquido peritoneal', buscar: 'cultivo corriente/liquido p', nombre: 'CULTIVO CORRIENTE/LIQUIDO PERITONEAL' },
+        { titulo: 'CMV IgG e IgM', items: [
+          { buscar: 'citomegalo', nombre: 'CITOMEGALOVIRUS (CMV) ANTICUERPOS IGG' },
+          { buscar: 'citomegalo', nombre: 'CITOMEGALOVIRUS (CMV) ANTICUERPOS IGM' },
+        ] },
+        { titulo: 'Toma test rápido VIH', buscar: 'test rapido', nombre: 'Toma Test rapido VIH' },
+        { titulo: 'VIH (anticuerpos y antígenos)', buscar: 'vih', nombre: 'VIH, anticuerpos y antígenos virales' },
+        { titulo: 'Hepatitis B Ac. anti Ag. superficie', buscar: 'hepatitis b', nombre: 'HEPATITIS B. AC. ANTI AG. DE SUPERFICIE' },
+      ] },
+      { titulo: 'Autoinmune', items: [
+        { titulo: 'ANA', buscar: 'antinuclear', nombre: 'ANTICUERPOS ANTINUCLEARES (ANA)' },
+        { titulo: 'ENA (tamizaje)', buscar: 'ena ', nombre: '(ENA) Tamizaje de Anticuerpos' },
+        { titulo: 'Factor reumatoideo', buscar: 'factor reum', nombre: 'Factor reumatoídeo' },
+        { titulo: 'Anti-CCP', buscar: 'citrulin', nombre: '(anti-CCP' },
+        { titulo: 'Anti-DNA', buscar: 'anti-dna', nombre: 'ANTICUERPOS ANTI-DNA' },
+        { titulo: 'ANCA C y ANCA P', buscar: 'anca', nombre: 'ANCA C Y ANCA P' },
+        { titulo: 'IgA, IgG e IgM', items: [
+          { buscar: 'inmunoglobulina', nombre: 'Inmunoglobulina A' },
+          { buscar: 'inmunoglobulina', nombre: 'Inmunoglobulina G' },
+          { buscar: 'inmunoglobulina', nombre: 'INMUNOGLOBULINA M' },
+        ] },
+      ] },
+    ],
+    // Menú "Hemoglucotest ▾" (barra "Indicaciones:"): TP = técnico paramédico, EU = enfermera
+    hemoglucotest: [
+      { grupo: 'Por TENS (TP)', items: [
+        ['Ahora', 'AHORA'], ['Cada 1 h', 'CADA 1 HORA'], ['Cada 2 h', 'CADA 2 HORAS'],
+        ['Cada 4 h', 'CADA 4 HORAS'], ['Cada 6 h', 'CADA 6 HORAS'], ['Cada 12 h', 'CADA 12 HORAS'],
+      ].map(([titulo, f]) => ({ titulo, buscar: 'hemoglucotest tp/', nombre: `Control de Hemoglucotest TP/${f}` })) },
+      { grupo: 'Por enfermera (EU)', items: [['Ahora', 'ahora'], ['Cada 1 h', '1 hora'], ['Cada 6 h', '6 horas']]
+        .map(([titulo, f]) => ({ titulo, buscar: 'toma hgt', nombre: `Toma HGT por EU/${f}` })) },
+      { grupo: 'Sin especificar', items: [
+        { titulo: 'Control de hemoglucotest', buscar: 'control de hemoglucotest', nombre: 'CONTROL DE HEMOGLUCOTEST' },
+        ...[['Ahora', 'AHORA'], ['Cada 1 h', 'CADA 1 HORA'], ['Cada 2 h', 'CADA 2 HORAS']]
+          .map(([titulo, f]) => ({ titulo, buscar: 'control de hemoglucotest', nombre: `Control de Hemoglucotest/${f}` })),
       ] },
     ],
     // Fármacos: menú "Fármacos ▾" agrupado. `producto` es la presentación exacta en ALMA
@@ -1479,8 +1539,8 @@
       const it = items[+sel.value];
       sel.value = '';
       if (!it) return;
-      const { titulo: t, ...item } = it;
-      const set = { titulo: t, items: [item] };
+      const { titulo: t, items: varios, ...item } = it;
+      const set = { titulo: t, items: varios || [item] }; // opción con uno o varios ítems
       run(t, () => (modo ? modo.agregar((nota) => agregarExamenes(set, nota)) : agregarExamenes(set)));
     });
     return sel;
@@ -1514,6 +1574,7 @@
       filaBarra('Indicaciones:',
         ...CONFIG.indicacionesRapidas.map((g) => crearMenu(g.titulo, gruposDeNombres(g), { modo: modoIndicaciones })),
         crearMenu('Fármacos', CONFIG.farmacos, { modo: modoIndicaciones }),
+        crearMenu('Hemoglucotest', CONFIG.hemoglucotest, { modo: modoIndicaciones }),
         modoIndicaciones.boton()),
       filaBarra('Exámenes:',
         ...CONFIG.examenes.map((set) => {
@@ -1522,7 +1583,7 @@
           b.classList.add('almah-set');
           return b;
         }),
-        crearMenu('Otros exámenes', CONFIG.otrosExamenes, { modo: modoExamenes }),
+        ...CONFIG.examenesGrupos.map((g) => crearMenu(g.titulo, [{ items: g.items }], { modo: modoExamenes })),
         modoExamenes.boton()),
     );
     fila.after(bar);
@@ -2417,7 +2478,7 @@
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
-        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
+        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Hemoglucotest ▾</b> y, en exámenes, <b>Lab diario</b>, <b>Coronario</b> y los menús <b>Perfiles</b>, <b>Cardiaco</b>, <b>Hemato</b>, <b>Endocrino</b>, <b>Nefro/HE</b>, <b>Microbiológico</b> y <b>Autoinmune</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
       ['🧪 Laboratorios y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
