@@ -30,11 +30,18 @@
       enfermeria: { titulo: 'Notas de enfermería', texto: 'Enfermera', tipos: ['Enfermera (o)'] },
       kinesiologia: { titulo: 'Notas de kinesiología', texto: 'Kinesi', tipos: ['Kinesiólogo (a)'] },
       tens: { titulo: 'Notas TENS', texto: 'Técnico', tipos: ['Técnico Nivel Superior', 'Técnico Paramédico'] },
+      // Perfil enfermería: un solo botón con kinesiología, TENS y fonoaudiología
+      otros: {
+        titulo: 'Notas de otros profesionales', tipos: ['Kinesiólogo (a)', 'Técnico Nivel Superior', 'Técnico Paramédico', 'Fonoaudiólogo (a)'],
+        textos: { 'Kinesiólogo (a)': 'Kinesi', 'Técnico Nivel Superior': 'Técnico', 'Técnico Paramédico': 'Técnico', 'Fonoaudiólogo (a)': 'Fono' },
+      },
     },
     // Perfil según el "Grupo de Seguridad" del usuario (menú de su nombre, arriba a la
     // derecha). Si contiene "Médico" se muestran las funciones médicas (evolucionar,
     // barra de indicaciones…); si no, las de notas por profesión.
     perfilMedico: /m[e\u00e9]dico/i,
+    // Grupos de enfermería, p. ej. "CLXX.IP.Enfermería Hospitalizado", "… Cuidados Críticos"
+    perfilEnfermeria: /enfermer/i,
     // Resultados de "Búsqueda de Indicaciones" que se ocultan. Se compara sin tildes
     // ni mayúsculas contra el nombre del ítem (expresiones regulares).
     // Cuidado con raíces muy cortas: p. ej. "pedia" también calza con "ortopedia".
@@ -101,6 +108,12 @@
     // Médica"); si no existe, cualquier acción que mencione "Evolución"
     accionNotasEvolucion: /^notas de evoluci/i,
     accionNotasEvolucionRespaldo: /evoluci/i,
+    // "📝 Notas enf" (perfil enfermería): como Evolucionar, con la evolución de enfermería
+    evolucionEnfermeria: {
+      tipoEntrada: /^(\d+\.\s*)?evoluci[o\u00f3]n enfermer/i, // "2. Evolución Enfermería Adultos"
+      tipoACopiar: /evoluci|ingreso/i,
+      profesional: /\(Enfermer/,                                 // "(Enfermera (o))"
+    },
     // Indicaciones frecuentes: un menú desplegable por grupo (nombres exactos de ALMA).
     // Se busca por el nombre completo; un clic solo AGREGA a la lista de pendientes.
     indicacionesRapidas: [
@@ -296,6 +309,8 @@
       notasEnfermeria: { alt: true, key: '1' },
       notasKinesiologia: { alt: true, key: '2' },
       notasTens: { alt: true, key: '3' },
+      notasOtros: { alt: true, key: '2' },
+      planEnf: { alt: true, key: 'p' },
       evolucion: { alt: true, key: 'e' },
       cerrarEvolucion: { alt: true, key: 'b' },
       indicaciones: { alt: true, key: 'i' },
@@ -323,6 +338,7 @@
     panelRCE: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-chartbook',
     panelNuevo: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-entry-add',
     panelActual: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-entry-current',
+    panelPlanCuidado: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-care-plan',
     usuarioActual: '#tc_NavBar-misc-profileToggle', // nombre del usuario (respaldo)
     grupoSeguridad: '#tc_NavBar-profilePanel-securityGroup', // p. ej. "CLXX.IP.Médico Cuidados Críticos"
     episodioPaciente: '[id$="-item-BANNERPAADMADMNo"]', // N° de episodio del banner
@@ -674,7 +690,7 @@
     await expandirOpcionesBusqueda();
     await quitarChipsAjenos(filtro);
     for (const tipo of filtro.tipos) {
-      if (!chipsTipoProf().includes(tipo)) await agregarTipoProf(tipo, filtro.texto);
+      if (!chipsTipoProf().includes(tipo)) await agregarTipoProf(tipo, filtro.textos?.[tipo] || filtro.texto);
     }
     const primera = filasEntradas()[0];
     document.querySelector(SEL.findButton).click();
@@ -700,20 +716,40 @@
   // ---------------------------------------------------------------------------
   // Perfil del usuario (Grupo de Seguridad): médico u otro profesional
   // ---------------------------------------------------------------------------
-  // Se lee primero el grupo que muestra el menú de perfil (lo que ve el usuario); los datos
-  // de la sesión pueden quedar con el grupo de quien usó antes la pestaña. Sin dato
-  // (p. ej. pantalla de login) se asume médico, el comportamiento original.
+  // Datos del usuario: servicio interno de ALMA (GlobalService) o sessionData. Tras iniciar
+  // sesión sin recargar (bloqueo por inactividad, cambio de usuario) sessionData puede quedar
+  // vacío hasta recargar la página.
+  function datosUsuario() {
+    try {
+      const ld = window.angular?.element(document.body).injector()?.get('GlobalService')?.logonData;
+      if (ld?.groupDesc || ld?.userName) return ld;
+    } catch (e) { /* sin Angular */ }
+    return window.sessionData?.logonData || {};
+  }
+  // Primero el grupo que muestra el menú de perfil (si está abierto), luego los datos del usuario
   const grupoSeguridad = () =>
-    document.querySelector(SEL.grupoSeguridad)?.textContent.trim() || window.sessionData?.logonData?.groupDesc || '';
+    document.querySelector(SEL.grupoSeguridad)?.textContent.trim() || datosUsuario().groupDesc || '';
+  // 'medico' | 'enfermeria' | 'otro' | 'desconocido' (sin grupo: solo funciones comunes)
   function perfilActual() {
     const grupo = grupoSeguridad();
-    return !grupo || CONFIG.perfilMedico.test(grupo) ? 'medico' : 'otro';
+    if (!grupo) return 'desconocido';
+    if (CONFIG.perfilMedico.test(grupo)) return 'medico';
+    return CONFIG.perfilEnfermeria.test(grupo) ? 'enfermeria' : 'otro';
   }
   const esMedico = () => perfilActual() === 'medico';
+  const esEnfermeria = () => perfilActual() === 'enfermeria';
+
+  // Evolucionar (médicos) / Notas enf (enfermería): qué entrada crear y qué notas copiar
+  const configEvolucion = () => (esEnfermeria() ? {
+    filtro: CONFIG.notas.enfermeria, ...CONFIG.evolucionEnfermeria,
+  } : {
+    filtro: CONFIG.notas.medicas, tipoEntrada: CONFIG.tipoEntradaEvolucion,
+    tipoACopiar: CONFIG.tipoEvolucionACopiar, profesional: CONFIG.profesionalACopiar,
+  });
 
   // Nombre del usuario conectado (en mayúsculas); error si no se puede leer
   function usuarioConectado() {
-    const nombre = window.sessionData?.logonData?.userName || document.querySelector(SEL.usuarioActual)?.textContent;
+    const nombre = datosUsuario().userName || document.querySelector(SEL.usuarioActual)?.textContent;
     if (!nombre?.trim()) throw new Error('no se pudo identificar al usuario conectado');
     return nombre.trim().toUpperCase();
   }
@@ -851,6 +887,14 @@
     }
     if (!abierta()) capSub().parentElement.click();
     if (!(await waitFor(abierta, { timeout: 15000 }))) throw new Error(`no se abrió "${sub}"`);
+  }
+
+  // Registro Clínico → panel "Plan de Cuidado" (cuentas de enfermería)
+  async function planCuidado(actionBtn) {
+    await abrirRegistroClinico(actionBtn);
+    const p = await waitFor(SEL.panelPlanCuidado, { timeout: 10000 });
+    if (!p) throw new Error('no apareció "Plan de Cuidado" en Registro Clínico');
+    p.click();
   }
 
   const documentos = (actionBtn) =>
@@ -991,7 +1035,7 @@
     if (!(await waitFor(() => filasEntradas().length, { timeout: 15000 })))
       throw new Error('no cargó la lista de registros');
     if (hayFiltrosDeTexto()) await limpiarFiltrosBusqueda();
-    await aplicarFiltroMedico();
+    await aplicarFiltroProfesional(configEvolucion().filtro);
     const res = await analizarListaEvoluciones();
     if (res.propiaHoy || res.candidatas.length) return res;
     throw new Error('no se encontró una evolución médica anterior');
@@ -1036,7 +1080,7 @@
       const texto = row.querySelector(SEL.entradaTexto)?.textContent.replace(/\s+/g, ' ').trim() || '';
       const tipo = texto.split(') -').pop().trim();
       if (!tipoHoy && /^\d{2}:\d{2}\b/.test(texto) && texto.toUpperCase().includes(yo)) tipoHoy = tipo;
-      if (!CONFIG.profesionalACopiar.test(texto) || !CONFIG.tipoEvolucionACopiar.test(tipo)) continue;
+      if (!configEvolucion().profesional.test(texto) || !configEvolucion().tipoACopiar.test(tipo)) continue;
       const hora = texto.match(/^(\d{2}:\d{2})\b/)?.[1];
       const fecha = texto.match(/^(\d{2}\/\d{2}\/\d{4})/)?.[1];
       if (!hora && !fecha) continue;
@@ -1096,7 +1140,7 @@
       const fila = await waitFor(
         () =>
           [...document.querySelectorAll(SEL.tipoEntradaRow)].find(
-            (r) => /-row-\d+$/.test(r.id) && CONFIG.tipoEntradaEvolucion.test(r.textContent.trim())
+            (r) => /-row-\d+$/.test(r.id) && configEvolucion().tipoEntrada.test(r.textContent.trim())
           ),
         { timeout: 10000 }
       );
@@ -1240,7 +1284,7 @@
     // "Actual" es tu entrada de hoy: si no es una Evolución (Ingreso, Evaluación,
     // Acciones adicionales…) se pregunta antes de pegar ahí.
     let nueva = false;
-    if (hayEntradaActual() && tipoHoy && !CONFIG.tipoEntradaEvolucion.test(tipoHoy)) {
+    if (hayEntradaActual() && tipoHoy && !configEvolucion().tipoEntrada.test(tipoHoy)) {
       const opcion = await preguntar(`Tu entrada de hoy es "${tipoHoy}". ¿Dónde pego la evolución?`, [
         { valor: 'nueva', texto: '🩺 Crear una Evolución nueva', tecla: 'n' },
         { valor: 'actual', texto: `📄 En "${tipoHoy}"`, tecla: 'a' },
@@ -1834,6 +1878,14 @@
           )
         );
       }
+      if (esEnfermeria()) {
+        bar.append(
+          mkBtn('📝 Notas enf', 'Escribir mi evolución de enfermería (copia la anterior)', () =>
+            run('Notas enf', () => evolucionDelDia(actionBtn))),
+          mkBtn('📋 Plan enf', 'Plan de cuidado de este paciente', () =>
+            run('Plan enf', () => planCuidado(actionBtn)))
+        );
+      }
       bar.append(
         mkBtn('🔒 Cerrar', 'Bloquear mis evoluciones y notas de hoy y de ayer', () =>
           run('Cerrar notas', () => cerrarEvolucion(actionBtn))
@@ -1856,7 +1908,12 @@
         mkBtn('📈 SV', 'Cargar aquí los últimos signos vitales (sin abrir la ficha)', () =>
           cargarSignosCama(bed))
       );
-      if (!esMedico()) {
+      if (esEnfermeria()) {
+        bar.append(
+          mkBtn('👥 Notas otros', 'Notas de kinesiología, TENS y fonoaudiología de este paciente', () =>
+            run('Notas otros', () => notasDe('otros', actionBtn)))
+        );
+      } else if (!esMedico()) {
         bar.append(
           mkBtn('🩹 Notas Enf.', 'Notas de enfermería de este paciente', () =>
             run('Notas de enfermería', () => notasDe('enfermeria', actionBtn))),
@@ -1891,11 +1948,14 @@
     return `${a.alt ? 'Alt+' : ''}${a.ctrl ? 'Ctrl+' : ''}${a.shift ? 'Shift+' : ''}${a.key.toUpperCase()}`;
   }
 
-  // perfil: 'medico' u 'otro' (sin perfil: para todos). Ver perfilActual().
+  // perfil: 'medico' | 'enfermeria' | 'otro' o una lista (sin perfil: para todos). Ver perfilActual().
   const TODAS_LAS_ACCIONES = [
     { id: 'evolucion', label: '🩺 Evolucionar', fn: () => evolucionDelDia(), perfil: 'medico' },
+    { id: 'evolucion', label: '📝 Notas enf', fn: () => evolucionDelDia(), perfil: 'enfermeria' },
+    { id: 'planEnf', label: '📋 Plan enf', fn: () => planCuidado(), perfil: 'enfermeria' },
     { id: 'cerrarEvolucion', label: '🔒 Cerrar notas', fn: () => cerrarEvolucion() },
     { id: 'notasMedicas', label: '📝 Notas médicas', fn: () => notasMedicas() },
+    { id: 'notasOtros', label: '👥 Notas otros', fn: () => notasDe('otros'), perfil: 'enfermeria' },
     { id: 'notasEnfermeria', label: '🩹 Notas de enfermería', fn: () => notasDe('enfermeria'), perfil: 'otro' },
     { id: 'notasKinesiologia', label: '🏃 Notas de kinesiología', fn: () => notasDe('kinesiologia'), perfil: 'otro' },
     { id: 'notasTens', label: '🧑‍⚕️ Notas TENS', fn: () => notasDe('tens'), perfil: 'otro' },
@@ -1917,7 +1977,7 @@
     const perfil = perfilActual();
     if (perfil === perfilConstruido) return;
     perfilConstruido = perfil;
-    ACCIONES = TODAS_LAS_ACCIONES.filter((a) => !a.perfil || a.perfil === perfil);
+    ACCIONES = TODAS_LAS_ACCIONES.filter((a) => !a.perfil || [].concat(a.perfil).includes(perfil));
     document.getElementById('almah-panel')?.remove();
     document.querySelectorAll('.almah-bedbar, .almah-examenes').forEach((e) => e.remove());
     crearPanel();
@@ -2512,8 +2572,10 @@
       ['💊 Fármacos vigentes', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra la sección <b>Fármacos Vigentes</b> de ALMA, sin abrir ninguna pantalla: primero los de esta atención y aparte, en gris, los de otras atenciones; los <b>en espera</b> llevan etiqueta. Los nombres se abrevian por vía (VO, EV, SC, IM). No se vuelve a consultar antes de 30 min (🔄 para actualizar) ni si la ventana está plegada. Un clic en su título la pliega o despliega, y se puede arrastrar.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
       ['🔒 Cerrar notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
+      perfil === 'enfermeria' && ['📝 Notas enf y 📋 Plan enf', `<p><kbd>${t('evolucion')}</kbd> <b>Notas enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y copia la evolución de enfermería más reciente de otra enfermera (si hay varias, pregunta cuál). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('planEnf')}</kbd> <b>Plan enf</b> abre Registro Clínico → Plan de Cuidado.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
-        (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
+        (perfil === 'enfermeria' ? ` · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: kinesiología, TENS y fonoaudiología`
+          : perfil === 'otro' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS` : '') +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Hemoglucotest ▾</b> y, en exámenes, los menús <b>Perfiles</b>, <b>Cardiaco</b>, <b>Hemato</b>, <b>Coagulación</b>, <b>Endocrino</b>, <b>Nefro/HE</b>, <b>UPC</b>, <b>Hepático/páncreas</b>, <b>Microbiológico</b> y <b>Autoinmune</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
@@ -2527,7 +2589,9 @@
     fondo.id = 'almah-dialogo';
     const caja = document.createElement('div');
     caja.className = 'almah-dialogo-caja almah-ayuda';
-    caja.innerHTML = `<p>⚡ Asistente ALMA v${VERSION} · perfil ${medico ? 'médico' : 'otros profesionales'}</p>` +
+    const perfil = perfilActual();
+    const nombrePerfil = { medico: 'médico', enfermeria: 'enfermería', otro: 'otros profesionales', desconocido: 'no detectado (recarga la página con F5)' }[perfil];
+    caja.innerHTML = `<p>⚡ Asistente ALMA v${VERSION} · perfil ${nombrePerfil}</p>` +
       '<small class="almah-grupo"></small>' +
       secciones.map(([titulo, html]) => `<h4>${titulo}</h4>${html}`).join('') +
       '<small>El script no guarda nada por ti: toda indicación o nota se revisa y se guarda en ALMA como siempre.</small>' +
