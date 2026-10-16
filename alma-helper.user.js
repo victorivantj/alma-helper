@@ -2566,6 +2566,7 @@
     if (document.getElementById('almah-dialogo')) return;
     const t = (id) => fmtAtajo(CONFIG.atajos[id]);
     const medico = esMedico();
+    const perfil = perfilActual();
     const secciones = [
       ['Panel y pestaña', `<p>La pestaña <b>⚡ Asistente ALMA</b> (borde derecho) abre este panel con un clic o con <kbd>${t('togglePanel')}</kbd>. Se puede arrastrar; si se suelta cerca del borde, queda pegada. El interruptor <b>Funciones</b> apaga todo el script sin desinstalarlo.</p>`],
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
@@ -2589,7 +2590,6 @@
     fondo.id = 'almah-dialogo';
     const caja = document.createElement('div');
     caja.className = 'almah-dialogo-caja almah-ayuda';
-    const perfil = perfilActual();
     const nombrePerfil = { medico: 'médico', enfermeria: 'enfermería', otro: 'otros profesionales', desconocido: 'no detectado (recarga la página con F5)' }[perfil];
     caja.innerHTML = `<p>⚡ Asistente ALMA v${VERSION} · perfil ${nombrePerfil}</p>` +
       '<small class="almah-grupo"></small>' +
