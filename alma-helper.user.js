@@ -152,6 +152,19 @@
     // Botón "⏰ Receta 8 AM" (reposo, régimen y fármacos): las 08:00 del día; antes de las 06:00,
     // las 08:00 del día anterior (la receta del turno que sigue en curso)
     horaIndicaciones: 8,
+    // ⚙️ Programar (Cuidados de Enfermería, bajo cada ítem por guardar): prioridad, frecuencia
+    // (nombre en ALMA), duración "Hasta" la próxima hora `fin` y horas del Modelo Dosificación
+    programarCuidados: {
+      prioridad: 'Normal',
+      fin: '07:59',
+      opciones: [
+        { titulo: 'Cada 24 h (06)', frecuencia: 'CADA 24 HORAS', horas: ['06:00'] },
+        { titulo: 'Cada 12 h (18 y 06)', frecuencia: 'CADA 12 HORAS', horas: ['18:00', '06:00'] },
+        { titulo: 'Cada 12 h (10 y 22)', frecuencia: 'CADA 12 HORAS', horas: ['10:00', '22:00'] },
+        { titulo: 'Cada 8 h (14, 22 y 06)', frecuencia: 'CADA 8 HORAS', horas: ['14:00', '22:00', '06:00'] },
+        { titulo: 'Cada 6 h (12, 18, 24 y 06)', frecuencia: 'CADA 6 HORAS', horas: ['12:00', '18:00', '00:00', '06:00'] },
+      ],
+    },
     corteIndicaciones: 6,
     // Mínimo entre dos búsquedas seguidas al agregar varios ítems (p. ej. IgA, IgG e IgM)
     pausaBusquedaIndicMs: 1500,
@@ -389,6 +402,12 @@
     pendienteRow: 'tr[id^="OEOrder_Entry_List_0-row-"]', // lista de indicaciones por guardar
     inicioFecha: '#OEOrder_Entry_0-item-OEORISttDat', // "Fecha de Inicio" para lo que se agregue
     inicioHora: '#OEOrder_Entry_0-item-OEORISttTim',
+    // Detalles de un ítem (Entry.Details) y su Modelo Dosificación
+    detalle: (campo) => `#OEOrder_RM_0-item-${campo}`,
+    detalleGuardar: '#OEOrder_RM_0-button-Update',
+    detalleDosis: '#OEOrder_RM_0-item-DoseModel-link',
+    dosisHora: 'input[id^="OEOrder_DosingModelCycle_TabControl0_0-row-"][id$="-item-DoseTime"]',
+    dosisActualizar: '#OEOrder_DosingModelCycle_TabControl0_0-button-update',
     // Imágenes y Documentos del Paciente: número de "Archivo Imagen" (abre "Detalles del
     // Documento") y, en esa página, "Ver documento" (muestra el PDF en el marco TRAK_main)
     docFila: 'tr[id^="MRPictures_ListEPR_"]',
@@ -1652,6 +1671,106 @@
     return sel;
   }
 
+  // ---- ⚙️ Programar un cuidado de enfermería ya agregado (sin guardar la indicación) ----
+  // Abre el ítem, pone prioridad, frecuencia, duración "Hasta" (próximas 07:59 desde el
+  // inicio), las horas del Modelo Dosificación y presiona Guardar del detalle, que solo lo
+  // deja listo en la lista: la enfermera revisa y guarda con su contraseña.
+  const textoPendiente = (row) => row.textContent.replace(/\s+/g, ' ').trim();
+
+  function decorarPendientesCuidados() {
+    for (const row of pendientes()) {
+      if (row.querySelector('.almah-prog-item')) continue;
+      const celda = [...row.querySelectorAll('td')].find((td) => td.textContent.includes('\u2014')) || row.lastElementChild;
+      const sel = document.createElement('select');
+      sel.className = 'almah-select almah-prog-item';
+      sel.title = 'Prioridad normal, frecuencia, hasta mañana 07:59 y horario (no guarda)';
+      sel.appendChild(new Option('⚙️ Programar ▾', ''));
+      CONFIG.programarCuidados.opciones.forEach((o, i) => sel.appendChild(new Option(o.titulo, String(i))));
+      for (const ev of ['click', 'mousedown', 'mouseup']) sel.addEventListener(ev, (e) => e.stopPropagation());
+      sel.addEventListener('change', () => {
+        const op = CONFIG.programarCuidados.opciones[+sel.value];
+        sel.value = '';
+        if (op) run('Programar', () => programarCuidado(textoPendiente(row), op));
+      });
+      celda.appendChild(Object.assign(document.createElement('div'), { className: 'almah-prog-fila' })).appendChild(sel);
+    }
+  }
+
+  // Campo de búsqueda (lookup) de ALMA: escribe y elige la opción cuyo texto empieza igual
+  async function elegirLookup(campo, texto) {
+    const id = SEL.detalle(campo).slice(1);
+    const inp = document.getElementById(id);
+    if (!inp) throw new Error(`no está el campo ${campo}`);
+    if (normalizar(inp.value) === normalizar(texto)) return;
+    inp.focus();
+    inp.value = texto;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    const fila = await waitFor(() => [...document.querySelectorAll(`tr[id^="${id}-lookupRow-"]`)]
+      .find((r) => normalizar(r.querySelector('td')?.textContent || '') === normalizar(texto)), { timeout: 8000 });
+    if (!fila) throw new Error(`no encontré "${texto}" en ${campo}`);
+    fila.click();
+    if (!(await waitFor(() => normalizar(inp.value) === normalizar(texto), { timeout: 5000 })))
+      throw new Error(`no quedó "${texto}" en ${campo}`);
+    await sleep(600);
+  }
+
+  function escribirDetalle(campo, valor) {
+    const el = document.querySelector(SEL.detalle(campo));
+    if (!el) throw new Error(`no está el campo ${campo}`);
+    if (el.value !== valor) fijarCampo(el, valor);
+  }
+
+  // Próxima hora `fin` (07:59) después del inicio dd/mm/aaaa hh:mm
+  function finDelTurno(fecha, hora) {
+    const [d, m, a] = fecha.split('/').map(Number);
+    const [hh, mm] = hora.split(':').map(Number);
+    const [fh, fm] = CONFIG.programarCuidados.fin.split(':').map(Number);
+    const inicio = new Date(a, m - 1, d, hh, mm);
+    const fin = new Date(a, m - 1, d, fh, fm);
+    if (fin <= inicio) fin.setDate(fin.getDate() + 1);
+    return fechaHora(fin, 0).fecha;
+  }
+
+  async function programarCuidado(texto, op) {
+    const row = pendientes().find((r) => textoPendiente(r) === texto);
+    if (!row) throw new Error('el ítem ya no está en la lista');
+    const celda = [...row.querySelectorAll('td')].find((td) => td.textContent.includes('\u2014')) || row;
+    const blanco = [...celda.querySelectorAll('span, a, div')].find((e) => e.children.length === 0 && e.textContent.trim()) || celda;
+    blanco.click();
+    if (!(await waitFor(SEL.detalle('OECPRDesc'), { timeout: 15000 }))) throw new Error('no se abrió el detalle del ítem');
+    await sleep(800);
+    toast(`Programando: ${op.titulo}…`);
+    await elegirLookup('OECPRDesc', CONFIG.programarCuidados.prioridad);
+    await elegirLookup('RMFrequency', op.frecuencia);
+    await elegirLookup('ITM2DurationType', 'Hasta');
+    const inicioF = document.querySelector(SEL.detalle('OEORISttDat')).value;
+    const inicioH = document.querySelector(SEL.detalle('OEORISttTim')).value;
+    escribirDetalle('OEORIEndDate', finDelTurno(inicioF, inicioH));
+    await sleep(500);
+    escribirDetalle('OEORIEndTime', CONFIG.programarCuidados.fin);
+    await sleep(1200);
+    // Modelo Dosificación: una fila por hora
+    document.querySelector(SEL.detalleDosis)?.click();
+    const horas = await waitFor(() => {
+      const h = [...document.querySelectorAll(SEL.dosisHora)].filter(isVisible);
+      return h.length ? h : null;
+    }, { timeout: 15000 });
+    if (!horas) throw new Error('no se abrió el Modelo Dosificación');
+    if (horas.length !== op.horas.length)
+      throw new Error(`el Modelo Dosificación tiene ${horas.length} horas y se esperaban ${op.horas.length}: revísalo a mano`);
+    for (const [i, el] of horas.entries()) {
+      if (el.value !== op.horas[i]) fijarCampo(el, op.horas[i]);
+      await sleep(300);
+    }
+    document.querySelector(SEL.dosisActualizar)?.click();
+    if (!(await waitFor(() => isVisible(document.querySelector(SEL.detalle('OECPRDesc'))) && !document.querySelector(SEL.dosisHora), { timeout: 15000 })))
+      throw new Error('no volvió al detalle después del Modelo Dosificación');
+    await sleep(800);
+    document.querySelector(SEL.detalleGuardar)?.click();
+    if (!(await waitFor(() => pendientes().length, { timeout: 15000 }))) throw new Error('no volvió a la lista');
+    toast(`Programado: ${op.titulo}, hasta ${CONFIG.programarCuidados.fin}. Revisa y guarda con tu contraseña.`, false, 7000);
+  }
+
   // Reposo/Régimen: opciones con el nombre exacto de ALMA ("REGIMEN CERO" → "CERO")
   const gruposDeNombres = (grupo) =>
     (grupo.grupos || [{ opciones: grupo.opciones }]).map((g) => ({
@@ -2584,6 +2703,7 @@
       modosProgramados.forEach((m) => m.aplicarSiHaceFalta());
       filtrarBusquedaIndicaciones();
       decorarIndicaciones();
+      if (esEnfermeria()) decorarPendientesCuidados();
     }
     actualizarPanelContextual();
     actualizarMedsFlotante();
@@ -2901,6 +3021,7 @@
     .almah-examenes { display: flex; flex-direction: column; gap: 4px; padding: 4px 6px;
       margin: 4px 0; background: #f4faf9; border-left: 3px solid #007067; }
     .almah-fila { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .almah-prog-fila { margin-top: 4px; }
     .almah-select { font: 11px system-ui, sans-serif; color: #00554e; background: #e8f4f3;
       border: 1px solid #007067; border-radius: 4px; padding: 1px 2px; max-width: 160px; cursor: pointer; }
     .almah-examenes-titulo { font: 600 11px system-ui, sans-serif; color: #00554e; margin-right: 2px; }
