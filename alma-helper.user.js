@@ -1673,7 +1673,8 @@
   }
 
   // ---- ⚙️ Programar un cuidado de enfermería ya agregado (sin guardar la indicación) ----
-  // Abre el ítem, pone prioridad, frecuencia, duración "Por N Día(s)", las horas del Modelo Dosificación y presiona Guardar del detalle, que solo lo
+  // Abre el ítem, pone prioridad, frecuencia, duración "Por N Día(s)", las horas del
+  // Modelo Dosificación y presiona Guardar del detalle, que solo lo
   // deja listo en la lista: la enfermera revisa y guarda con su contraseña.
   const textoPendiente = (row) => {
     const c = row.cloneNode(true);
@@ -1717,9 +1718,10 @@
       .find((r) => normalizar(r.querySelector('td')?.textContent || '').trim() === normalizar(texto)), { timeout: 8000 });
     if (!fila) throw new Error(`no encontré "${texto}" en ${campo}`);
     fila.click();
-    if (!(await waitFor(() => normalizar(inp.value) === normalizar(texto), { timeout: 5000 })))
-      throw new Error(`no quedó "${texto}" en ${campo}`);
-    await sleep(600);
+    // ALMA puede deshacer el cambio (p. ej. frecuencia con horario personalizado): se revisa después
+    await sleep(1500);
+    if (normalizar(inp.value) !== normalizar(texto))
+      throw new Error(`ALMA no aceptó "${texto}" en ${campo} (quedó "${inp.value}"). Si el ítem ya tiene un horario personalizado, elimínalo y agrégalo de nuevo`);
   }
 
   function escribirDetalle(campo, valor) {
