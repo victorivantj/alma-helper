@@ -151,6 +151,19 @@
     // las 08:00 del día anterior (la receta del turno que sigue en curso)
     horaIndicaciones: 8,
     corteIndicaciones: 6,
+    // Signos vitales sin abrir la pantalla (Parámetros Clínicos → Signos Vitales (v)):
+    // identificadores internos de esa pantalla en ALMA (iguales entre sesiones).
+    signosVitales: {
+      chartBookId: '167',
+      chartId: 'wZgJ17zHeXMe7_79KnTXFg',
+      chart: '1061',
+      vigenciaMin: 30, // no se vuelven a pedir si se consultaron hace menos
+      atrasoMin: 120,  // en unidades críticas, aviso si el último control completo es más antiguo
+      // Unidades críticas (nombre sin tildes, minúsculas): UPC, UCI, UTI, UTIP, intensivos,
+      // intermedios, críticos; menos cuidados intensivos psiquiátricos
+      unidadCritica: /\b(upc|uci|uti|utip)\b|intensiv|intermedi|critic/,
+      unidadNoCritica: /psiquiatr/,
+    },
     // Resto de exámenes: menú "Otros exámenes ▾" agrupado
     otrosExamenes: [
       { grupo: 'Hematología', items: [
@@ -283,6 +296,8 @@
     docVer: '#MRPictures_Edit_0-item-ViewDocument-link',
     docMarco: 'TRAK_main',
     bannerNombre: '#PAPerson_Banner-row-0-item-BANNERName2',
+    bedNombre: '[id$="-patient-dataHeader-0-dataItem-0"]', // nombre del paciente en la cama
+    bannerUnidad: '#PAPerson_Banner-row-0-item-BANNERWARDDesc', // "UPC CORONARIA - HSJD"
   };
 
   // Opciones del menú ••• del paciente (id = sufijo de tc_ActionMenu-menu-<id>)
@@ -1526,9 +1541,8 @@
         mkBtn('📄 Docs', 'Imágenes y documentos del paciente', () =>
           run('Documentos', () => documentos(actionBtn))
         ),
-        mkBtn('📈 Signos vit.', 'Signos vitales (Parámetros Clínicos)', () =>
-          run('Signos vitales', () => signosVitales(actionBtn))
-        )
+        mkBtn('📈 SV', 'Cargar aquí los últimos signos vitales (sin abrir la ficha)', () =>
+          cargarSignosCama(bed))
       );
       if (!esMedico()) {
         bar.append(
@@ -1719,6 +1733,331 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Signos vitales sin abrir Parámetros Clínicos
+  // ---------------------------------------------------------------------------
+  // Se piden al servidor igual que lo hace la pantalla Signos Vitales (misma petición,
+  // con la sesión del usuario). En la ficha basta la llave de la página (TUID); en el mapa
+  // se agregan los números internos de cada cama, que el mapa recibe de ALMA.
+  // Solo a pedido (botón 📈 SV / "Cargar todas") o al abrir una ficha; no se vuelven a
+  // pedir si se consultaron hace < vigenciaMin (🔄 fuerza). Se guardan solo en memoria.
+  const SV = [
+    { c: 'FC', re: /^frecuencia cardiaca/ },
+    { c: 'PA', re: /sistolica/, f: (v) => v.replace(/\s*\/\s*/, '/') },
+    { c: 'PAM', re: /presion arterial media/, f: (v) => String(Math.round(parseFloat(v))) },
+    { c: 'FR', re: /frecuencia respiratoria/ },
+    { c: 'Sat', re: /saturacion/, suf: '%' },
+    { c: 'FiO2', re: /^fio2/, suf: '%' },
+    { c: 'T°', re: /temperatura/, f: (v) => v.replace('.', ',') },
+    { c: 'HGT', re: /hemoglucotest/ },
+  ];
+  const signos = new Map(); // nombre del paciente → { tomas, consultado, error, cargando }
+
+  const tokenXsrf = () => decodeURIComponent((document.cookie.match(/XSRF-TOKEN=([^;]+)/) || [])[1] || '');
+  const paramHash = (k) => (location.hash.match(new RegExp(`[?&]${k}=([^&]+)`)) || [])[1];
+  const textoHtml = (h) => new DOMParser().parseFromString(String(h ?? ''), 'text/html').body.textContent.replace(/\s+/g, ' ').trim();
+
+  async function postRouter(url, campos) {
+    const fd = new FormData();
+    campos.forEach(([k, v]) => fd.append(k, v));
+    const r = await fetch(url, {
+      method: 'POST', credentials: 'include', body: fd,
+      headers: { Accept: 'application/json, text/plain, */*', 'X-XSRF-TOKEN': tokenXsrf() },
+    });
+    if (!r.ok) throw new Error(`ALMA respondió ${r.status}`);
+    return r.json();
+  }
+
+  // Números internos de las camas del mapa ("Cama 198" → { id, episodeId, mradm }).
+  // Se vuelven a pedir si tienen más de 1 min, para no usar los de un paciente que ya se fue.
+  let camasMapa = { contexto: null, t: 0, porCama: new Map() };
+  async function datosCamasMapa() {
+    const ctx = paramHash('CONTEXT');
+    if (camasMapa.contexto === ctx && Date.now() - camasMapa.t < 60000) return camasMapa.porCama;
+    const j = await postRouter('system.Router.cls?TFLOORPLAN=1',
+      [['TUID', paramHash('TUID')], ['TUID', '0'], ['CONTEXT', ctx], ['Dialog', paramHash('Dialog') || '0']]);
+    const porCama = new Map();
+    (j.beds || []).forEach((b) => b.patient && porCama.set(String(b.description).trim(),
+      { id: b.patient.id, episodeId: b.patient.episodeId, mradm: b.patient.mradm }));
+    camasMapa = { contexto: ctx, t: Date.now(), porCama };
+    return porCama;
+  }
+
+  // Tomas (más nueva primero): [{ t: Date, v: { FC: '82', PA: '120/70', … } }]
+  function tomasDeRespuesta(cd) {
+    const filas = (cd?.listRows || []).filter((f) => !f.ObsItem?.hiddenItem);
+    const captions = cd?.listDynColumnSettings?.ObsData?.captions || [];
+    const porParam = SV.map((p) => ({ p, fila: filas.find((f) => p.re.test(sinTildes(textoHtml(f.ObsItem?.value)))) }));
+    return captions.map((cap, i) => {
+      const m = textoHtml(cap).match(/(\d{2})\/(\d{2})\/(\d{4})\D+(\d{1,2}):(\d{2})/);
+      const v = {};
+      porParam.forEach(({ p, fila }) => {
+        const val = fila && textoHtml(fila.ObsData?.[i]?.value);
+        if (val) v[p.c] = p.f ? p.f(val) : val;
+      });
+      return m && Object.keys(v).length ? { t: new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]), v } : null;
+    }).filter(Boolean).sort((a, b) => b.t - a.t);
+  }
+
+  const completa = (toma) => toma.v.FC && toma.v.PA;
+  const redibujar = () => setTimeout(() => activo && decorarTodo(), 0);
+  const fresco = (e) => e && Date.now() - e.consultado < CONFIG.signosVitales.vigenciaMin * 60000;
+
+  async function cargarSignos(nombre, campos, { forzar = false } = {}) {
+    const previo = signos.get(nombre);
+    if (previo?.cargando) return previo.cargando;
+    if (!forzar && fresco(previo)) return previo;
+    const cfg = CONFIG.signosVitales;
+    const cargando = postRouter(`system.Router.cls?TDATAONLYCALL=1&TCHARTITEM=0&TCHART=${cfg.chart}&TREQUESTTYPE=itemData`,
+      [['TUID', paramHash('TUID')], ['TUID', '0'], ['Dialog', '0'], ['chartBookId', cfg.chartBookId], ['chartId', cfg.chartId], ...campos])
+      .then((j) => ({ tomas: tomasDeRespuesta(j.componentData), consultado: Date.now() }))
+      .catch((e) => ({ tomas: previo?.tomas || [], consultado: Date.now(), error: e.message }))
+      .then((e) => {
+        signos.set(nombre, e);
+        redibujar();
+        return e;
+      });
+    signos.set(nombre, { ...(previo || { tomas: [], consultado: 0 }), cargando });
+    redibujar();
+    return cargando;
+  }
+
+  function esUnidadCritica(nombreUnidad) {
+    const u = sinTildes(nombreUnidad || '');
+    return CONFIG.signosVitales.unidadCritica.test(u) && !CONFIG.signosVitales.unidadNoCritica.test(u);
+  }
+  // Unidad del paciente (encabezado de la ficha); en el mapa, la del mapa
+  const unidadVisible = () => document.querySelector(SEL.bannerUnidad)?.textContent.trim() ||
+    (location.hash.startsWith('#/Floorplan') ? document.title.split(':')[0] : window.sessionData?.logonData?.locDesc) || '';
+
+  const horaCorta = (t) => {
+    const hoy = new Date();
+    const hh = `${dosDigitos(t.getHours())}:${dosDigitos(t.getMinutes())}`;
+    return t.toDateString() === hoy.toDateString() ? hh : `${dosDigitos(t.getDate())}/${dosDigitos(t.getMonth() + 1)} ${hh}`;
+  };
+  const haceMin = (ms) => {
+    const m = Math.floor((Date.now() - ms) / 60000);
+    return m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : `hace ${Math.floor(m / 60)} h ${m % 60} min`;
+  };
+  const textoToma = (toma) => SV.filter((p) => p.c !== 'PAM' && toma.v[p.c]).map((p) => {
+    const val = `${toma.v[p.c]}${p.suf || ''}`;
+    return p.c === 'PA' && toma.v.PAM ? `PA ${val} (${toma.v.PAM})` : `${p.c} ${val}`;
+  }).join(' · ');
+
+  // Última toma y, si le falta FC o PA (registro parcial, p. ej. por un evento), el control
+  // completo anterior. `atrasada`: en unidad crítica, el último control completo tiene > atrasoMin.
+  function resumenSignos(e, critica) {
+    const ultima = e.tomas[0];
+    if (!ultima) return { lineas: [], atrasada: false };
+    const lineas = [ultima];
+    if (!completa(ultima)) {
+      const previa = e.tomas.find(completa);
+      if (previa) lineas.push(previa);
+    }
+    const ref = e.tomas.find(completa) || ultima;
+    return { lineas, atrasada: critica && Date.now() - ref.t > CONFIG.signosVitales.atrasoMin * 60000 };
+  }
+
+  function lineaToma(toma, atrasada, parcial) {
+    const div = document.createElement('div');
+    div.className = 'almah-sv-linea';
+    const h = document.createElement('b');
+    h.textContent = horaCorta(toma.t);
+    if (atrasada) {
+      h.classList.add('almah-sv-atrasada');
+      h.title = `Último control completo hace más de ${CONFIG.signosVitales.atrasoMin / 60} h`;
+    }
+    div.append(h, ` ${textoToma(toma)}${parcial ? ' (parcial)' : ''}`);
+    return div;
+  }
+
+  // ---- Mapa de camas ----
+  async function cargarSignosCama(bed, { forzar = false } = {}) {
+    const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
+    const cama = bed.querySelector('[id$="-header-title"]')?.textContent.trim();
+    if (!nombre || !cama) return;
+    try {
+      const ids = (await datosCamasMapa()).get(cama);
+      if (!ids) throw new Error('no se encontró la cama en los datos del mapa');
+      await cargarSignos(nombre, [['EpisodeID', ids.episodeId], ['PatientID', ids.id], ['mradm', ids.mradm]], { forzar });
+    } catch (e) {
+      toast(`Signos vitales (${cama}): ${e.message}`, true);
+    }
+  }
+
+  async function cargarSignosTodas({ forzar = false } = {}) {
+    const camas = [...document.querySelectorAll(SEL.bed)].filter((b) => b.querySelector(SEL.bedNombre));
+    const pendientes = camas.filter((b) => forzar || !fresco(signos.get(b.querySelector(SEL.bedNombre).textContent.trim())));
+    if (!pendientes.length) {
+      toast(`Signos vitales ya consultados hace menos de ${CONFIG.signosVitales.vigenciaMin} min (🔄 en cada cama para actualizar)`);
+      return;
+    }
+    toast(`Cargando signos vitales de ${pendientes.length} camas…`);
+    camasMapa.t = 0; // números internos frescos
+    for (let i = 0; i < pendientes.length; i += 3) {
+      await Promise.all(pendientes.slice(i, i + 3).map((b) => cargarSignosCama(b, { forzar })));
+    }
+    toast('Signos vitales cargados');
+  }
+
+  function decorarSignosCamas() {
+    const titulo = document.getElementById('tc_Floorplan-misc-header');
+    if (titulo && !titulo.querySelector('.almah-sv-todas') && document.querySelector(SEL.bed)) {
+      const b = mkBtn('📈 Cargar signos vitales (todas)', 'Cargar los últimos signos vitales de todas las camas', () =>
+        cargarSignosTodas());
+      b.classList.add('almah-sv-todas');
+      titulo.appendChild(b);
+    }
+    const critica = esUnidadCritica(unidadVisible());
+    document.querySelectorAll(SEL.bed).forEach((bed) => {
+      const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
+      const e = nombre && signos.get(nombre);
+      let caja = bed.querySelector('.almah-sv');
+      if (!e) {
+        caja?.remove();
+        return;
+      }
+      const clave = `${e.cargando ? 'c' : ''}|${e.consultado}|${e.error || ''}|${Math.floor((Date.now() - e.consultado) / 60000)}`;
+      if (caja && caja.dataset.clave === clave) return;
+      if (!caja) {
+        caja = document.createElement('div');
+        caja.className = 'almah-sv';
+        (bed.querySelector('.almah-bedbar') || bed.querySelector(`#${bed.id}-patient`) || bed).after(caja);
+        caja.addEventListener('click', (ev) => ev.stopPropagation());
+      }
+      caja.dataset.clave = clave;
+      caja.replaceChildren();
+      if (e.cargando) caja.append('📈 Cargando…');
+      else if (e.error && !e.tomas.length) caja.append(`📈 No se pudieron cargar (${e.error})`);
+      else if (!e.tomas.length) caja.append('📈 Sin signos vitales registrados');
+      else {
+        const { lineas, atrasada } = resumenSignos(e, critica);
+        lineas.forEach((t, i) => caja.append(lineaToma(t, atrasada && i === lineas.length - 1, !completa(t))));
+      }
+      if (!e.cargando) {
+        const pie = document.createElement('div');
+        pie.className = 'almah-sv-pie';
+        pie.append(`consultado ${haceMin(e.consultado)} `,
+          mkBtn('🔄', 'Volver a consultar', () => cargarSignosCama(bed, { forzar: true })));
+        caja.appendChild(pie);
+      }
+    });
+  }
+
+  // ---- Ventana flotante en la ficha ----
+  let svPlegado = false;
+  try { svPlegado = localStorage.getItem('almah-sv-plegado') === '1'; } catch (e) { /* sin storage */ }
+
+  function actualizarSignosFlotante() {
+    const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
+    let win = document.getElementById('almah-sv-flot');
+    if (!nombre) {
+      if (win) win.hidden = true;
+      return;
+    }
+    let e = signos.get(nombre);
+    if (!e || (!e.cargando && !fresco(e))) {
+      cargarSignos(nombre, []); // llave de la página: el paciente abierto
+      e = signos.get(nombre);
+    }
+    if (!win) {
+      win = document.createElement('div');
+      win.id = 'almah-sv-flot';
+      const head = document.createElement('div');
+      head.className = 'almah-sv-head';
+      head.title = 'Mostrar/ocultar · arrastrar para mover';
+      hacerArrastrable(win, head, () => {
+        svPlegado = win.classList.toggle('almah-collapsed');
+        try { localStorage.setItem('almah-sv-plegado', svPlegado ? '1' : '0'); } catch (err) { /* sin storage */ }
+        posicionSV(win);
+      }, (w) => {
+        const r = w.getBoundingClientRect();
+        try { localStorage.setItem('almah-sv-pos', JSON.stringify({ top: r.top, left: r.left })); } catch (err) { /* sin storage */ }
+        posicionSV(w);
+      });
+      const cuerpo = document.createElement('div');
+      cuerpo.className = 'almah-sv-cuerpo';
+      win.append(head, cuerpo);
+      document.body.appendChild(win);
+      window.addEventListener('resize', () => posicionSV(win));
+    }
+    const critica = esUnidadCritica(unidadVisible());
+    const clave = `${nombre}|${e.cargando ? 'c' : ''}|${e.consultado}|${e.error || ''}|${critica}|${Math.floor((Date.now() - e.consultado) / 60000)}`;
+    win.hidden = false;
+    win.classList.toggle('almah-collapsed', svPlegado);
+    if (win.dataset.clave !== clave) {
+      win.dataset.clave = clave;
+      const head = win.querySelector('.almah-sv-head');
+      const cuerpo = win.querySelector('.almah-sv-cuerpo');
+      const { lineas, atrasada } = resumenSignos(e, critica);
+      head.replaceChildren();
+      const titulo = document.createElement('span');
+      titulo.textContent = '📈 Signos vitales';
+      const info = document.createElement('small');
+      info.textContent = e.cargando ? 'cargando…' : lineas[0] ? `última toma ${horaCorta(lineas[0].t)}` : '';
+      if (atrasada) info.classList.add('almah-sv-atrasada');
+      const flecha = document.createElement('span');
+      flecha.className = 'almah-meds-flecha';
+      head.append(titulo, info, flecha);
+      cuerpo.replaceChildren();
+      if (e.cargando) cuerpo.append('Cargando…');
+      else if (e.error && !e.tomas.length) cuerpo.append(`No se pudieron cargar (${e.error})`);
+      else if (!e.tomas.length) cuerpo.append('Sin signos vitales registrados');
+      else cuerpo.appendChild(tablaSignos(e.tomas.slice(0, 6), atrasada));
+      if (!e.cargando) {
+        const pie = document.createElement('div');
+        pie.className = 'almah-sv-pie';
+        pie.append(`consultado ${haceMin(e.consultado)} `,
+          mkBtn('🔄', 'Volver a consultar', () => cargarSignos(nombre, [], { forzar: true })),
+          mkBtn('↗ Ver todo', 'Abrir Parámetros Clínicos → Signos Vitales', () => run('Signos vitales', () => signosVitales())));
+        cuerpo.appendChild(pie);
+      }
+    }
+    posicionSV(win);
+  }
+
+  // Tabla hora × parámetro (solo columnas con algún dato); las filas parciales quedan con huecos
+  function tablaSignos(tomas, atrasada) {
+    const cols = SV.filter((p) => p.c !== 'PAM' && tomas.some((t) => t.v[p.c]));
+    const tabla = document.createElement('table');
+    const fila = (celdas, tag) => {
+      const tr = document.createElement('tr');
+      celdas.forEach((c) => {
+        const td = document.createElement(tag);
+        if (c instanceof Node) td.appendChild(c); else td.textContent = c;
+        tr.appendChild(td);
+      });
+      return tr;
+    };
+    tabla.appendChild(fila(['Hora', ...cols.map((p) => p.c + (p.suf ? ` ${p.suf}` : ''))], 'th'));
+    const ref = tomas.find(completa);
+    tomas.forEach((t) => {
+      const hora = document.createElement('span');
+      hora.textContent = horaCorta(t.t);
+      if (atrasada && t === ref) hora.className = 'almah-sv-atrasada';
+      const tr = fila([hora, ...cols.map((p) => (p.c === 'PA' && t.v.PA && t.v.PAM ? `${t.v.PA} (${t.v.PAM})` : t.v[p.c] || ''))], 'td');
+      if (!completa(t)) tr.className = 'almah-sv-parcial';
+      tabla.appendChild(tr);
+    });
+    return tabla;
+  }
+
+  // Posición guardada { top, left } tras arrastrar; si no, abajo, a la derecha de la de prescripción
+  function posicionSV(win) {
+    let pos = null;
+    try { pos = JSON.parse(localStorage.getItem('almah-sv-pos') || 'null'); } catch (e) { /* sin storage */ }
+    const r = win.getBoundingClientRect();
+    if (!pos) {
+      Object.assign(win.style, { left: `${Math.max(0, Math.min(450, window.innerWidth - r.width - 16))}px`, top: 'auto', bottom: '0' });
+      return;
+    }
+    Object.assign(win.style, {
+      left: `${Math.max(0, Math.min(pos.left, window.innerWidth - r.width))}px`,
+      top: `${Math.max(0, Math.min(pos.top, window.innerHeight - r.height))}px`,
+      bottom: 'auto',
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Interruptor general: desactiva todas las funciones sin desinstalar el script
   // ---------------------------------------------------------------------------
   let activo = true;
@@ -1727,7 +2066,10 @@
   // Cada función trabaja solo en su pantalla, para no recorrer todo en cada cambio
   function decorarTodo() {
     const h = location.hash;
-    if (h.startsWith('#/Floorplan')) decorarCamas();
+    if (h.startsWith('#/Floorplan')) {
+      decorarCamas();
+      decorarSignosCamas();
+    }
     if (document.querySelector(SEL.docLink)) decorarDocumentos();
     if (document.querySelector(SEL.ordenRow)) {
       aplicarFiltroMeds();
@@ -1742,6 +2084,7 @@
     }
     actualizarPanelContextual();
     actualizarMedsFlotante();
+    actualizarSignosFlotante();
   }
 
   // Deja ALMA como sin el script: quita botones, barras, resaltados y filtros
@@ -1753,6 +2096,9 @@
     document.getElementById('almah-panel')?.classList.remove('almah-hay-contexto');
     const flot = document.getElementById('almah-meds-flot');
     if (flot) flot.hidden = true;
+    document.querySelectorAll('.almah-sv, .almah-sv-todas').forEach((e) => e.remove());
+    const sv = document.getElementById('almah-sv-flot');
+    if (sv) sv.hidden = true;
   }
 
   function setActivo(valor) {
@@ -2085,6 +2431,28 @@
     #almah-meds-flot.almah-collapsed ul { display: none; }
     #almah-meds-flot.almah-collapsed { opacity: .9; }
     #almah-meds-flot.almah-sin-datos .almah-meds-head { cursor: pointer; }
+    .almah-sv { font: 10.5px/1.35 system-ui, sans-serif; color: #333; padding: 2px 4px 3px; overflow-wrap: anywhere; }
+    .almah-sv-linea b { color: #00554e; margin-right: 2px; }
+    .almah-sv .almah-sv-pie, #almah-sv-flot .almah-sv-pie { color: #80868b; font-size: 10px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .almah-sv .almah-btn, #almah-sv-flot .almah-sv-pie .almah-btn { padding: 0 4px; font-size: 10px; }
+    .almah-sv-atrasada { color: #fff !important; background: #e37400; border-radius: 3px; padding: 0 3px; }
+    .almah-sv-todas { margin-left: 8px; }
+    #almah-sv-flot { position: fixed; left: 450px; bottom: 0; z-index: 99998; max-width: 560px; min-width: 240px;
+      font: 12px/1.35 system-ui, sans-serif; background: #fff; border: 1px solid #007067; border-radius: 8px 8px 0 0;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2); overflow: hidden; }
+    #almah-sv-flot[hidden] { display: none; }
+    #almah-sv-flot .almah-sv-head { background: #007067; color: #fff; padding: 5px 10px; cursor: move;
+      user-select: none; display: flex; gap: 8px; align-items: baseline; font-weight: 700; }
+    #almah-sv-flot .almah-sv-head small { font-weight: 400; font-size: 10.5px; margin-left: auto; }
+    #almah-sv-flot .almah-meds-flecha::after { content: '\\25BE'; }
+    #almah-sv-flot.almah-collapsed .almah-meds-flecha::after { content: '\\25B4'; }
+    #almah-sv-flot.almah-collapsed .almah-sv-cuerpo { display: none; }
+    #almah-sv-flot .almah-sv-cuerpo { padding: 6px 8px 8px; max-height: 45vh; overflow: auto; color: #222; }
+    #almah-sv-flot table { border-collapse: collapse; font-size: 11.5px; margin-bottom: 4px; }
+    #almah-sv-flot th, #almah-sv-flot td { padding: 1px 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid #eef2f1; }
+    #almah-sv-flot th { color: #00554e; font-weight: 600; }
+    #almah-sv-flot td:first-child, #almah-sv-flot th:first-child { text-align: left; }
+    #almah-sv-flot tr.almah-sv-parcial td { color: #80868b; font-style: italic; }
     #almah-meds-flot .almah-meds-link { text-decoration: underline; }
     .almah-bedbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px 4px; }
     #almah-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
