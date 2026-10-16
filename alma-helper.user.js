@@ -639,6 +639,7 @@
   // Tras saltar se valida el paciente (nombre del encabezado) y la pestaña; si falla, se
   // olvida lo aprendido y se usa el camino normal.
   const llavesPaciente = new Map(); // nombre del paciente → TUID de sus pestañas del RCE
+  if (medicion.activa) window.almahLlaves = llavesPaciente; // depuración
   let rutasRCE = {};
   try { rutasRCE = JSON.parse(sessionStorage.getItem('almah-rutas-rce') || '{}'); } catch (e) { /* sin storage */ }
   const guardarRutas = () => {
