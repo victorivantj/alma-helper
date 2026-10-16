@@ -108,6 +108,7 @@
     // Médica"); si no existe, cualquier acción que mencione "Evolución"
     accionNotasEvolucion: /^notas de evoluci/i,
     accionNotasEvolucionRespaldo: /evoluci/i,
+    accionCuidadosEnfermeria: /^cuidados de enfermer/i, // acción de la entrada (perfil enfermería)
     // "📝 Evolución enf" (perfil enfermería): como Evolucionar, con la evolución de enfermería
     evolucionEnfermeria: {
       tipoEntrada: /^(\d+\.\s*)?evoluci[o\u00f3]n enfermer/i, // "2. Evolución Enfermería Adultos"
@@ -310,7 +311,7 @@
       notasKinesiologia: { alt: true, key: '2' },
       notasTens: { alt: true, key: '3' },
       notasOtros: { alt: true, key: '2' },
-      planEnf: { alt: true, key: 'p' },
+      cuidadosEnf: { alt: true, key: 'i' },
       evolucion: { alt: true, key: 'e' },
       cerrarEvolucion: { alt: true, key: 'b' },
       indicaciones: { alt: true, key: 'i' },
@@ -338,7 +339,6 @@
     panelRCE: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-chartbook',
     panelNuevo: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-entry-add',
     panelActual: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-entry-current',
-    panelPlanCuidado: '#epr_UPR_Composite_0-item-FunctionsPanel-menu-upr-care-plan',
     usuarioActual: '#tc_NavBar-misc-profileToggle', // nombre del usuario (respaldo)
     grupoSeguridad: '#tc_NavBar-profilePanel-securityGroup', // p. ej. "CLXX.IP.Médico Cuidados Críticos"
     episodioPaciente: '[id$="-item-BANNERPAADMADMNo"]', // N° de episodio del banner
@@ -889,18 +889,6 @@
     if (!(await waitFor(abierta, { timeout: 15000 }))) throw new Error(`no se abrió "${sub}"`);
   }
 
-  // Registro Clínico → panel "Plan de Cuidado" (cuentas de enfermería)
-  async function planCuidado(actionBtn) {
-    await abrirRegistroClinico(actionBtn);
-    const p = await waitFor(SEL.panelPlanCuidado, { timeout: 10000 });
-    if (!p) throw new Error('no apareció "Plan de Cuidado" en Registro Clínico');
-    // ALMA lo habilita solo con una entrada de hoy (igual que "Actual")
-    if (p.getAttribute('aria-disabled') === 'true') {
-      throw new Error('"Plan de Cuidado" está deshabilitado en ALMA para este paciente (se habilita cuando hay una entrada de hoy)');
-    }
-    p.click();
-  }
-
   const documentos = (actionBtn) =>
     abrirSubpestanaRCE('Documentos e Imágenes', 'Imágenes y Documentos del Paciente', actionBtn);
   const examenes = (actionBtn) =>
@@ -1134,7 +1122,9 @@
   const hayEntradaActual = () =>
     document.querySelector(SEL.panelActual)?.getAttribute('aria-disabled') === 'false';
 
-  async function abrirNotaEvolucion({ nueva = false } = {}) {
+  // Abre tu entrada de hoy ("Actual") o crea la del tipo de configEvolucion() ("Nuevo")
+  // y devuelve la acción que calza con `patrones` (la primera que exista)
+  async function accionDeEntradaHoy({ nueva = false, patrones, nombre }) {
     if (hayEntradaActual() && !nueva) {
       toast('Abriendo la evolución de hoy…', false, 30000);
       document.querySelector(SEL.panelActual).click();
@@ -1154,13 +1144,23 @@
     const accion = await waitFor(
       () => {
         const acciones = [...document.querySelectorAll(SEL.accionLink)].filter(isVisible);
-        const texto = (a) => a.textContent.trim();
-        return acciones.find((a) => CONFIG.accionNotasEvolucion.test(texto(a))) ||
-          acciones.find((a) => CONFIG.accionNotasEvolucionRespaldo.test(texto(a)));
+        for (const re of patrones) {
+          const a = acciones.find((x) => re.test(x.textContent.trim()));
+          if (a) return a;
+        }
+        return null;
       },
       { timeout: 45000 } // crear la entrada tarda ~10 s
     );
-    if (!accion) throw new Error('no apareció la acción "Notas de Evolución"');
+    if (!accion) throw new Error(`no apareció la acción "${nombre}"`);
+    return accion;
+  }
+
+  async function abrirNotaEvolucion({ nueva = false } = {}) {
+    const accion = await accionDeEntradaHoy({
+      nueva, nombre: 'Notas de Evolución',
+      patrones: [CONFIG.accionNotasEvolucion, CONFIG.accionNotasEvolucionRespaldo],
+    });
     const anterior = editorNotasVisible(); // puede quedar uno de una pantalla previa
     accion.click();
     const editor = await waitFor(() => {
@@ -1170,6 +1170,20 @@
     if (!editor) throw new Error('no se abrió el editor de la nota');
     await sleep(1500); // ALMA carga su valor inicial en el editor (setEditorDataOnLoad)
     return editorNotasVisible() || editor;
+  }
+
+  // 🛏️ Cuidados enf: acción "Cuidados de Enfermería" de tu entrada de hoy. Si no hay entrada
+  // de hoy, pregunta antes de crear la Evolución de Enfermería (crearla queda en ALMA).
+  async function cuidadosEnfermeria(actionBtn) {
+    await abrirRegistroClinico(actionBtn);
+    if (!hayEntradaActual()) {
+      const r = await preguntar('No tienes una entrada de hoy para este paciente. ¿Crear tu Evolución de Enfermería para registrar los cuidados?', [
+        { valor: 'si', texto: '📝 Crear la evolución de hoy', tecla: 'c' },
+      ]);
+      if (r !== 'si') return;
+    }
+    const accion = await accionDeEntradaHoy({ nombre: 'Cuidados de Enfermería', patrones: [CONFIG.accionCuidadosEnfermeria] });
+    accion.click();
   }
 
   // Instancia CKEditor de "Notas" lista y visible en pantalla
@@ -1886,8 +1900,8 @@
         bar.append(
           mkBtn('📝 Evolución enf', 'Escribir mi evolución de enfermería (copia la anterior)', () =>
             run('Evolución enf', () => evolucionDelDia(actionBtn))),
-          mkBtn('📋 Plan enf', 'Plan de cuidado de este paciente', () =>
-            run('Plan enf', () => planCuidado(actionBtn)))
+          mkBtn('🛏️ Cuidados enf', 'Cuidados de Enfermería de este paciente (en tu entrada de hoy)', () =>
+            run('Cuidados enf', () => cuidadosEnfermeria(actionBtn)))
         );
       }
       bar.append(
@@ -1897,9 +1911,9 @@
         mkBtn('📝 Notas MD', 'Notas médicas de este paciente', () =>
           run('Notas médicas', () => notasMedicas(actionBtn))
         ),
-        mkBtn('✍️ Indic.', 'Indicaciones de este paciente', () =>
+        ...(esEnfermeria() ? [] : [mkBtn('✍️ Indic.', 'Indicaciones de este paciente', () =>
           run('Indicaciones', () => indicaciones(actionBtn))
-        ),
+        )]),
         mkBtn('💊 Medicam.', 'Medicamentos de este paciente', () =>
           run('Medicamentos', () => medicamentos(actionBtn))
         ),
@@ -1958,14 +1972,14 @@
   const TODAS_LAS_ACCIONES = [
     { id: 'evolucion', label: '🩺 Evolucionar', fn: () => evolucionDelDia(), perfil: 'medico' },
     { id: 'evolucion', label: '📝 Evolución enf', fn: () => evolucionDelDia(), perfil: 'enfermeria' },
-    { id: 'planEnf', label: '📋 Plan enf', fn: () => planCuidado(), perfil: 'enfermeria' },
     { id: 'cerrarEvolucion', label: '🔒 Cerrar notas', fn: () => cerrarEvolucion() },
     { id: 'notasMedicas', label: '📝 Notas médicas', fn: () => notasMedicas() },
     { id: 'notasOtros', label: '👥 Notas otros', fn: () => notasDe('otros'), perfil: 'enfermeria' },
     { id: 'notasEnfermeria', label: '🩹 Notas de enfermería', fn: () => notasDe('enfermeria'), perfil: ['otro', 'enfermeria'] },
     { id: 'notasKinesiologia', label: '🏃 Notas de kinesiología', fn: () => notasDe('kinesiologia'), perfil: 'otro' },
     { id: 'notasTens', label: '🧑‍⚕️ Notas TENS', fn: () => notasDe('tens'), perfil: 'otro' },
-    { id: 'indicaciones', label: '✍️ Indicaciones', fn: () => indicaciones() },
+    { id: 'indicaciones', label: '✍️ Indicaciones', fn: () => indicaciones(), perfil: ['medico', 'otro', 'desconocido'] },
+    { id: 'cuidadosEnf', label: '🛏️ Cuidados enf', fn: () => cuidadosEnfermeria(), perfil: 'enfermeria' },
     { id: 'medicamentos', label: '💊 Medicamentos', fn: () => medicamentos() },
     { id: 'examenes', label: '🧪 Laboratorios', fn: () => examenes() },
     { id: 'documentos', label: '📄 Documentos', fn: () => documentos() },
@@ -2579,12 +2593,12 @@
       ['💊 Fármacos vigentes', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra la sección <b>Fármacos Vigentes</b> de ALMA, sin abrir ninguna pantalla: primero los de esta atención y aparte, en gris, los de otras atenciones; los <b>en espera</b> llevan etiqueta. Los nombres se abrevian por vía (VO, EV, SC, IM). No se vuelve a consultar antes de 30 min (🔄 para actualizar) ni si la ventana está plegada. Un clic en su título la pliega o despliega, y se puede arrastrar.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
       ['🔒 Cerrar notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
-      perfil === 'enfermeria' && ['📝 Evolución enf y 📋 Plan enf', `<p><kbd>${t('evolucion')}</kbd> <b>Evolución enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y copia la evolución de enfermería más reciente de otra enfermera (si hay varias, pregunta cuál). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('planEnf')}</kbd> <b>Plan enf</b> abre Registro Clínico → Plan de Cuidado.</p>`],
+      perfil === 'enfermeria' && ['📝 Evolución enf y 🛏️ Cuidados enf', `<p><kbd>${t('evolucion')}</kbd> <b>Evolución enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y copia la evolución de enfermería más reciente de otra enfermera (si hay varias, pregunta cuál). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('cuidadosEnf')}</kbd> <b>Cuidados enf</b> abre la acción «Cuidados de Enfermería» de tu entrada de hoy (si no la tienes, pregunta antes de crear tu Evolución de Enfermería). Reemplaza a Indicaciones en este perfil.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (perfil === 'enfermeria' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería (ver) · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: kinesiología, TENS y fonoaudiología`
           : perfil === 'otro' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS` : '') +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
-      ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
+      perfil !== 'enfermeria' && ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Hemoglucotest ▾</b> y, en exámenes, los menús <b>Perfiles</b>, <b>Cardiaco</b>, <b>Hemato</b>, <b>Coagulación</b>, <b>Endocrino</b>, <b>Nefro/HE</b>, <b>UPC</b>, <b>Hepático/páncreas</b>, <b>Microbiológico</b> y <b>Autoinmune</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
