@@ -691,7 +691,8 @@
     return (bed ? bed.querySelector(SEL.bedNombre) : document.querySelector(SEL.bannerNombre))?.textContent.trim();
   };
 
-  // true si llegó a `tab` del paciente correcto; false si no se conoce el camino o falló
+  // true si llegó a `tab` del paciente correcto; false si no se conoce el camino (usar el
+  // normal). Si el salto falla, vuelve a la pantalla de origen y lanza un error.
   async function saltarAPestanaRCE(tab, actionBtn) {
     const nombre = nombreParaAccion(actionBtn);
     const tuid = nombre && llavesPaciente.get(nombre);
@@ -706,11 +707,17 @@
       return enBanner === nombre ? 'ok' : enBanner && confirmado(`otro|${tab}`, enBanner) ? 'otro' : null;
     }, { timeout: 12000 });
     if (r === 'ok') return true;
+    // Falló (otro paciente o no cargó): se olvida lo aprendido y se vuelve a la pantalla de
+    // origen. Nunca se sigue desde aquí: podría ser la ficha de otro paciente.
     llavesPaciente.delete(nombre);
     delete rutasRCE[normalizar(tab)];
     guardarRutas();
-    if (medicion.activa) console.info('[ALMA Helper] salto directo falló; se usa el camino normal:', tab);
-    return false;
+    location.hash = antes;
+    await waitFor(() => location.hash === antes &&
+      (!antes.startsWith('#/Floorplan') || document.querySelector(SEL.bed)), { timeout: 15000 });
+    throw new Error(r === 'otro'
+      ? 'el acceso directo abrió otro paciente; se volvió atrás. Vuelve a intentarlo (irá por el camino normal)'
+      : 'el acceso directo no cargó; se volvió atrás. Vuelve a intentarlo (irá por el camino normal)');
   }
 
   // Registro Clínico → RCE → Medicamentos
