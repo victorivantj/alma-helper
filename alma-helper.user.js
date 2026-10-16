@@ -362,6 +362,13 @@
   // En la consola: almahMedicion() muestra el total por acción; almahMedicionReiniciar()
   // lo borra; almahEtiqueta('Notas a mano') etiqueta lo que hagas a mano, para comparar.
   const medicion = { activa: false, accion: null, registros: [], delScript: [] }; // delScript: URL pedidas por el script
+
+  // El navegador guarda solo 250 recursos; lleno, deja de anotar (y de avisar a los
+  // PerformanceObserver: 👁 Ver documento y esta medición). Se vacía al llenarse.
+  try {
+    performance.addEventListener('resourcetimingbufferfull', () => performance.clearResourceTimings());
+    if (performance.getEntriesByType('resource').length >= 250) performance.clearResourceTimings();
+  } catch (e) { /* navegador sin Resource Timing */ }
   try { medicion.activa = localStorage.getItem('almah-debug') === '1'; } catch (e) { /* sin storage */ }
 
   function rutaSegura(url) {
