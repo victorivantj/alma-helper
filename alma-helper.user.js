@@ -654,28 +654,31 @@
     return false;
   }
 
-  // Pestaña abierta del RCE: la subpestaña seleccionada o, si no hay, la pestaña principal
-  const pestanaAbierta = () => (document.querySelector(SEL.chartSubSeleccionada) ||
-    document.querySelector(`${SEL.chartMenuSeleccionado} ${SEL.chartMenuCaption}`))?.textContent.trim() || '';
+  // Pestañas abiertas del RCE (normalizadas): la subpestaña seleccionada y su pestaña
+  // principal (al abrir "Medicamentos", ALMA selecciona "Medicamentos - Atención Actual")
+  const pestanasAbiertas = () => [document.querySelector(SEL.chartSubSeleccionada),
+    document.querySelector(`${SEL.chartMenuSeleccionado} > ${SEL.chartMenuCaption}`)]
+    .map((c) => normalizar(c?.textContent || '')).filter(Boolean);
 
   let relojAprender = null;
   function aprenderRutasRCE() {
-    const m = location.hash.match(/^#\/Chart\/([^/?]+)\/([^/?]+)\?(?:.*&)?TUID=(\d+)/);
-    if (!m) return;
-    const [, libro, pestana, tuid] = m;
+    const m = location.hash.match(/^#\/Chart\/([^/?]+)\/([^/?]+)\?/);
+    const tuid = location.hash.match(/[?&]TUID=(\d+)/)?.[1]; // el primero (el segundo es TUID=0)
+    if (!m || !tuid || tuid === '0') return;
+    const [, libro, pestana] = m;
     const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
-    const tab = normalizar(pestanaAbierta());
     const ruta = `${libro}/${pestana}`;
     let falta = false;
     if (nombre && llavesPaciente.get(nombre) !== tuid) {
       if (confirmado(`llave|${nombre}`, tuid)) llavesPaciente.set(nombre, tuid); else falta = true;
     }
-    if (tab && rutasRCE[tab] !== ruta) {
+    pestanasAbiertas().forEach((tab) => {
+      if (rutasRCE[tab] === ruta) return;
       if (confirmado(`ruta|${tab}`, ruta)) {
         rutasRCE[tab] = ruta;
         guardarRutas();
       } else falta = true;
-    }
+    });
     // La página puede quedar quieta: se vuelve a mirar para confirmar
     if (falta && !relojAprender) {
       relojAprender = setTimeout(() => { relojAprender = null; if (activo) aprenderRutasRCE(); }, 1600);
@@ -695,7 +698,7 @@
     const ruta = rutasRCE[normalizar(tab)];
     if (!tuid || !ruta) return false;
     location.hash = `#/Chart/${ruta}?TUID=${tuid}&TUID=0&Dialog=2`;
-    const ok = await waitFor(() => normalizar(pestanaAbierta()) === normalizar(tab) &&
+    const ok = await waitFor(() => pestanasAbiertas().includes(normalizar(tab)) &&
       document.querySelector(SEL.bannerNombre)?.textContent.trim() === nombre, { timeout: 12000 });
     if (ok) return true;
     llavesPaciente.delete(nombre);
