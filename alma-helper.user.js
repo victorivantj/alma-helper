@@ -157,6 +157,7 @@
     programarCuidados: {
       prioridad: 'Normal',
       fin: '07:59',
+      dias: [1, 3, 5], // duración: hasta las 07:59 del último día (1 día = mañana 07:59)
       opciones: [
         { titulo: 'Cada 24 h (06)', frecuencia: 'CADA 24 HORAS', horas: ['06:00'] },
         { titulo: 'Cada 12 h (18 y 06)', frecuencia: 'CADA 12 HORAS', horas: ['18:00', '06:00'] },
@@ -1683,16 +1684,20 @@
       const celda = [...row.querySelectorAll('td')].find((td) => td.textContent.includes('\u2014')) || row.lastElementChild;
       const sel = document.createElement('select');
       sel.className = 'almah-select almah-prog-item';
-      sel.title = 'Prioridad normal, frecuencia, hasta mañana 07:59 y horario (no guarda)';
+      sel.title = 'Prioridad normal, frecuencia, duración hasta las 07:59 y horario (no guarda la indicación)';
       sel.appendChild(new Option('⚙️ Programar ▾', ''));
       CONFIG.programarCuidados.opciones.forEach((o, i) => sel.appendChild(new Option(o.titulo, String(i))));
-      for (const ev of ['click', 'mousedown', 'mouseup']) sel.addEventListener(ev, (e) => e.stopPropagation());
+      const dias = document.createElement('select');
+      dias.className = 'almah-select';
+      dias.title = 'Duración (hasta las 07:59 del último día)';
+      CONFIG.programarCuidados.dias.forEach((n) => dias.appendChild(new Option(`${n} día${n > 1 ? 's' : ''}`, String(n))));
+      for (const el of [sel, dias]) for (const ev of ['click', 'mousedown', 'mouseup']) el.addEventListener(ev, (e) => e.stopPropagation());
       sel.addEventListener('change', () => {
         const op = CONFIG.programarCuidados.opciones[+sel.value];
         sel.value = '';
-        if (op) run('Programar', () => programarCuidado(textoPendiente(row), op));
+        if (op) run('Programar', () => programarCuidado(textoPendiente(row), op, +dias.value));
       });
-      celda.appendChild(Object.assign(document.createElement('div'), { className: 'almah-prog-fila' })).appendChild(sel);
+      celda.appendChild(Object.assign(document.createElement('div'), { className: 'almah-prog-fila' })).append(dias, sel);
     }
   }
 
@@ -1720,18 +1725,19 @@
     if (el.value !== valor) fijarCampo(el, valor);
   }
 
-  // Próxima hora `fin` (07:59) después del inicio dd/mm/aaaa hh:mm
-  function finDelTurno(fecha, hora) {
+  // Próxima hora `fin` (07:59) después del inicio dd/mm/aaaa hh:mm, más los días extra
+  function finDelTurno(fecha, hora, dias = 1) {
     const [d, m, a] = fecha.split('/').map(Number);
     const [hh, mm] = hora.split(':').map(Number);
     const [fh, fm] = CONFIG.programarCuidados.fin.split(':').map(Number);
     const inicio = new Date(a, m - 1, d, hh, mm);
     const fin = new Date(a, m - 1, d, fh, fm);
     if (fin <= inicio) fin.setDate(fin.getDate() + 1);
+    fin.setDate(fin.getDate() + dias - 1);
     return fechaHora(fin, 0).fecha;
   }
 
-  async function programarCuidado(texto, op) {
+  async function programarCuidado(texto, op, dias = 1) {
     const row = pendientes().find((r) => textoPendiente(r) === texto);
     if (!row) throw new Error('el ítem ya no está en la lista');
     const celda = [...row.querySelectorAll('td')].find((td) => td.textContent.includes('\u2014')) || row;
@@ -1745,7 +1751,8 @@
     await elegirLookup('ITM2DurationType', 'Hasta');
     const inicioF = document.querySelector(SEL.detalle('OEORISttDat')).value;
     const inicioH = document.querySelector(SEL.detalle('OEORISttTim')).value;
-    escribirDetalle('OEORIEndDate', finDelTurno(inicioF, inicioH));
+    const fin = finDelTurno(inicioF, inicioH, dias);
+    escribirDetalle('OEORIEndDate', fin);
     await sleep(500);
     escribirDetalle('OEORIEndTime', CONFIG.programarCuidados.fin);
     await sleep(1200);
@@ -1768,7 +1775,7 @@
     await sleep(800);
     document.querySelector(SEL.detalleGuardar)?.click();
     if (!(await waitFor(() => pendientes().length, { timeout: 15000 }))) throw new Error('no volvió a la lista');
-    toast(`Programado: ${op.titulo}, hasta ${CONFIG.programarCuidados.fin}. Revisa y guarda con tu contraseña.`, false, 7000);
+    toast(`Programado: ${op.titulo}, hasta ${fin} ${CONFIG.programarCuidados.fin}. Revisa y guarda con tu contraseña.`, false, 7000);
   }
 
   // Reposo/Régimen: opciones con el nombre exacto de ALMA ("REGIMEN CERO" → "CERO")
