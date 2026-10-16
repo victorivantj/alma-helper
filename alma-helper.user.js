@@ -108,7 +108,7 @@
     // Médica"); si no existe, cualquier acción que mencione "Evolución"
     accionNotasEvolucion: /^notas de evoluci/i,
     accionNotasEvolucionRespaldo: /evoluci/i,
-    // "📝 Notas enf" (perfil enfermería): como Evolucionar, con la evolución de enfermería
+    // "📝 Evolución enf" (perfil enfermería): como Evolucionar, con la evolución de enfermería
     evolucionEnfermeria: {
       tipoEntrada: /^(\d+\.\s*)?evoluci[o\u00f3]n enfermer/i, // "2. Evolución Enfermería Adultos"
       tipoACopiar: /evoluci|ingreso/i,
@@ -739,7 +739,7 @@
   const esMedico = () => perfilActual() === 'medico';
   const esEnfermeria = () => perfilActual() === 'enfermeria';
 
-  // Evolucionar (médicos) / Notas enf (enfermería): qué entrada crear y qué notas copiar
+  // Evolucionar (médicos) / Evolución enf (enfermería): qué entrada crear y qué notas copiar
   const configEvolucion = () => (esEnfermeria() ? {
     filtro: CONFIG.notas.enfermeria, ...CONFIG.evolucionEnfermeria,
   } : {
@@ -1884,8 +1884,8 @@
       }
       if (esEnfermeria()) {
         bar.append(
-          mkBtn('📝 Notas enf', 'Escribir mi evolución de enfermería (copia la anterior)', () =>
-            run('Notas enf', () => evolucionDelDia(actionBtn))),
+          mkBtn('📝 Evolución enf', 'Escribir mi evolución de enfermería (copia la anterior)', () =>
+            run('Evolución enf', () => evolucionDelDia(actionBtn))),
           mkBtn('📋 Plan enf', 'Plan de cuidado de este paciente', () =>
             run('Plan enf', () => planCuidado(actionBtn)))
         );
@@ -1957,7 +1957,7 @@
   // perfil: 'medico' | 'enfermeria' | 'otro' o una lista (sin perfil: para todos). Ver perfilActual().
   const TODAS_LAS_ACCIONES = [
     { id: 'evolucion', label: '🩺 Evolucionar', fn: () => evolucionDelDia(), perfil: 'medico' },
-    { id: 'evolucion', label: '📝 Notas enf', fn: () => evolucionDelDia(), perfil: 'enfermeria' },
+    { id: 'evolucion', label: '📝 Evolución enf', fn: () => evolucionDelDia(), perfil: 'enfermeria' },
     { id: 'planEnf', label: '📋 Plan enf', fn: () => planCuidado(), perfil: 'enfermeria' },
     { id: 'cerrarEvolucion', label: '🔒 Cerrar notas', fn: () => cerrarEvolucion() },
     { id: 'notasMedicas', label: '📝 Notas médicas', fn: () => notasMedicas() },
@@ -2579,7 +2579,7 @@
       ['💊 Fármacos vigentes', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra la sección <b>Fármacos Vigentes</b> de ALMA, sin abrir ninguna pantalla: primero los de esta atención y aparte, en gris, los de otras atenciones; los <b>en espera</b> llevan etiqueta. Los nombres se abrevian por vía (VO, EV, SC, IM). No se vuelve a consultar antes de 30 min (🔄 para actualizar) ni si la ventana está plegada. Un clic en su título la pliega o despliega, y se puede arrastrar.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
       ['🔒 Cerrar notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
-      perfil === 'enfermeria' && ['📝 Notas enf y 📋 Plan enf', `<p><kbd>${t('evolucion')}</kbd> <b>Notas enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y copia la evolución de enfermería más reciente de otra enfermera (si hay varias, pregunta cuál). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('planEnf')}</kbd> <b>Plan enf</b> abre Registro Clínico → Plan de Cuidado.</p>`],
+      perfil === 'enfermeria' && ['📝 Evolución enf y 📋 Plan enf', `<p><kbd>${t('evolucion')}</kbd> <b>Evolución enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y copia la evolución de enfermería más reciente de otra enfermera (si hay varias, pregunta cuál). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('planEnf')}</kbd> <b>Plan enf</b> abre Registro Clínico → Plan de Cuidado.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (perfil === 'enfermeria' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería (ver) · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: kinesiología, TENS y fonoaudiología`
           : perfil === 'otro' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS` : '') +
