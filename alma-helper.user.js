@@ -159,7 +159,7 @@
       dias: [1, 3, 5], // con inicio 08:00, ALMA deja la Fecha Fin a las 07:59 del último día
       unidadDias: 'Día(s)',
       opciones: [
-        { titulo: 'Cada 24 h (06)', frecuencia: 'CADA 24 HORAS', horas: ['06:00'] },
+        { titulo: '1 al día (06)', frecuencia: '1 AL DIA', horas: ['06:00'] },
         { titulo: 'Cada 12 h (18 y 06)', frecuencia: 'CADA 12 HORAS', horas: ['18:00', '06:00'] },
         { titulo: 'Cada 12 h (10 y 22)', frecuencia: 'CADA 12 HORAS', horas: ['10:00', '22:00'] },
         { titulo: 'Cada 8 h (14, 22 y 06)', frecuencia: 'CADA 8 HORAS', horas: ['14:00', '22:00', '06:00'] },
