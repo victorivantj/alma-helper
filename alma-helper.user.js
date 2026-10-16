@@ -135,6 +135,11 @@
     corteIndicaciones: 6,
     // Mínimo entre dos búsquedas seguidas al agregar varios ítems (p. ej. IgA, IgG e IgM)
     pausaBusquedaIndicMs: 1500,
+    // Ventana "Fármacos vigentes": nombres que se acortan (inicio del nombre, en mayúsculas)
+    nombresFarmacos: [
+      ['INSULINA HM ACCION INTERMEDIA-PROTAMINA', 'INSULINA NPH'],
+      ['POLIETILENGLICOL', 'PEG'],
+    ],
     // Ventana "Fármacos vigentes": sección de la portada del RCE (identificadores internos)
     farmacosVigentes: { chartBookId: '167', chart: '442', item: '9', vigenciaMin: 30 },
     // Signos vitales sin abrir la pantalla (Parámetros Clínicos → Signos Vitales (v)):
@@ -1933,6 +1938,8 @@
   const VIAS = [[/^ORAL/, 'VO'], [/^INTRAVENOSA/, 'EV'], [/^SUBCUTANEA/, 'SC'], [/^INTRAMUSCULAR/, 'IM']];
   const PRESENTACION = /\b(FRASCO AMPOLLA|AMPOLLA|COMPRIMIDO|CM|JERING[AE] PRE-LLENADA|JERING[AE]|MATRAZ)\b/;
   function nombreCorto(nombre, linea) {
+    const abrev = CONFIG.nombresFarmacos.find(([largo]) => nombre.toUpperCase().startsWith(largo));
+    if (abrev) nombre = abrev[1] + nombre.slice(abrev[0].length); // p. ej. POLIETILENGLICOL → PEG
     const partes = String(linea || '').split('—').map((p) => sinTildes(p).toUpperCase());
     const via = partes.map((p) => VIAS.find(([re]) => re.test(p))?.[1]).find(Boolean);
     if (!via) return nombre;
