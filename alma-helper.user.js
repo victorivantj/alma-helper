@@ -30,11 +30,8 @@
       enfermeria: { titulo: 'Notas de enfermería', texto: 'Enfermera', tipos: ['Enfermera (o)'] },
       kinesiologia: { titulo: 'Notas de kinesiología', texto: 'Kinesi', tipos: ['Kinesiólogo (a)'] },
       tens: { titulo: 'Notas TENS', texto: 'Técnico', tipos: ['Técnico Nivel Superior', 'Técnico Paramédico'] },
-      // Perfil enfermería: un solo botón con kinesiología, TENS y fonoaudiología
-      otros: {
-        titulo: 'Notas de otros profesionales', tipos: ['Kinesiólogo (a)', 'Técnico Nivel Superior', 'Técnico Paramédico', 'Fonoaudiólogo (a)'],
-        textos: { 'Kinesiólogo (a)': 'Kinesi', 'Técnico Nivel Superior': 'Técnico', 'Técnico Paramédico': 'Técnico', 'Fonoaudiólogo (a)': 'Fono' },
-      },
+      fono: { titulo: 'Notas de fonoaudiología', texto: 'Fono', tipos: ['Fonoaudiólogo (a)'] },
+      terapiaOcupacional: { titulo: 'Notas de terapia ocupacional', texto: 'Terapeuta', tipos: ['Terapeuta Ocupacional'] },
     },
     // Perfil según el "Grupo de Seguridad" del usuario (menú de su nombre, arriba a la
     // derecha). Si contiene "Médico" se muestran las funciones médicas (evolucionar,
@@ -712,6 +709,17 @@
     toast(`${filtro.titulo} filtradas ✔`);
   }
   const notasMedicas = (actionBtn) => notasDe('medicas', actionBtn);
+
+  // 👥 Notas otros (perfil enfermería): elegir la profesión y filtrar solo por ella
+  async function notasOtros(actionBtn) {
+    const clave = await preguntar('¿Qué notas quieres ver?', [
+      { valor: 'tens', texto: '🧑‍⚕️ TENS', tecla: 't' },
+      { valor: 'kinesiologia', texto: '🏃 Kinesiología', tecla: 'k' },
+      { valor: 'fono', texto: '🗣️ Fonoaudiología', tecla: 'f' },
+      { valor: 'terapiaOcupacional', texto: '🧩 Terapia ocupacional', tecla: 'o' },
+    ]);
+    if (clave) await notasDe(clave, actionBtn);
+  }
 
   // ---------------------------------------------------------------------------
   // Perfil del usuario (Grupo de Seguridad): médico u otro profesional
@@ -1930,8 +1938,8 @@
         bar.append(
           mkBtn('🩹 Notas Enf.', 'Ver las notas de enfermería de este paciente', () =>
             run('Notas de enfermería', () => notasDe('enfermeria', actionBtn))),
-          mkBtn('👥 Notas otros', 'Notas de kinesiología, TENS y fonoaudiología de este paciente', () =>
-            run('Notas otros', () => notasDe('otros', actionBtn)))
+          mkBtn('👥 Notas otros', 'Notas de TENS, kinesiología, fonoaudiología o terapia ocupacional', () =>
+            run('Notas otros', () => notasOtros(actionBtn)))
         );
       } else if (!esMedico()) {
         bar.append(
@@ -1974,7 +1982,7 @@
     { id: 'evolucion', label: '📝 Evolución enf', fn: () => evolucionDelDia(), perfil: 'enfermeria' },
     { id: 'cerrarEvolucion', label: '🔒 Cerrar notas', fn: () => cerrarEvolucion() },
     { id: 'notasMedicas', label: '📝 Notas médicas', fn: () => notasMedicas() },
-    { id: 'notasOtros', label: '👥 Notas otros', fn: () => notasDe('otros'), perfil: 'enfermeria' },
+    { id: 'notasOtros', label: '👥 Notas otros', fn: () => notasOtros(), perfil: 'enfermeria' },
     { id: 'notasEnfermeria', label: '🩹 Notas de enfermería', fn: () => notasDe('enfermeria'), perfil: ['otro', 'enfermeria'] },
     { id: 'notasKinesiologia', label: '🏃 Notas de kinesiología', fn: () => notasDe('kinesiologia'), perfil: 'otro' },
     { id: 'notasTens', label: '🧑‍⚕️ Notas TENS', fn: () => notasDe('tens'), perfil: 'otro' },
@@ -2595,7 +2603,7 @@
       ['🔒 Cerrar notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
       perfil === 'enfermeria' && ['📝 Evolución enf y 🛏️ Cuidados enf', `<p><kbd>${t('evolucion')}</kbd> <b>Evolución enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y copia la evolución de enfermería más reciente de otra enfermera (si hay varias, pregunta cuál). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('cuidadosEnf')}</kbd> <b>Cuidados enf</b> abre la acción «Cuidados de Enfermería» de tu entrada de hoy (si no la tienes, pregunta antes de crear tu Evolución de Enfermería). Reemplaza a Indicaciones en este perfil.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
-        (perfil === 'enfermeria' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería (ver) · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: kinesiología, TENS y fonoaudiología`
+        (perfil === 'enfermeria' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería (ver) · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: elige TENS, kinesiología, fonoaudiología o terapia ocupacional`
           : perfil === 'otro' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS` : '') +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       perfil !== 'enfermeria' && ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
