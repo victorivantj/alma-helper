@@ -541,9 +541,13 @@
 
   // Deja la Búsqueda sin filtros (tipos de profesional, fechas, palabra clave) y
   // vuelve a buscar, para revisar la lista completa del paciente.
+  // Fechas o palabra clave escritas en la Búsqueda (pueden esconder registros)
+  const hayFiltrosDeTexto = () => [SEL.fechaDesde, SEL.fechaHasta, SEL.palabraClave]
+    .some((sel) => document.querySelector(sel)?.value?.trim());
+
   async function limpiarFiltrosBusqueda() {
-    const valor = (sel) => document.querySelector(sel)?.value?.trim();
-    if (!chipsTipoProf().length && !valor(SEL.fechaDesde) && !valor(SEL.fechaHasta) && !valor(SEL.palabraClave)) return;
+    if (!chipsTipoProf().length && !hayFiltrosDeTexto()) return;
+    ultimaBusqueda = null;
     toast('Quitando filtros de la Búsqueda…');
     document.querySelector(SEL.limpiarBusqueda)?.click();
     await waitFor(() => !chipsTipoProf().length, { timeout: 5000 });
@@ -583,13 +587,28 @@
     throw new Error(`no se pudo seleccionar el tipo "${nombre}"`);
   }
 
+  // Última búsqueda hecha por el script: { tuid (paciente/página), firma (tipos) }. Si se
+  // pide el mismo filtro sobre la misma lista, no se vuelve a buscar (2 peticiones menos).
+  let ultimaBusqueda = null;
+  const firmaTipos = (tipos) => [...tipos].sort().join('|');
+
   async function aplicarFiltroProfesional(filtro) {
+    const tuid = paramHash('TUID');
+    const firma = firmaTipos(filtro.tipos);
+    if (ultimaBusqueda?.tuid === tuid && ultimaBusqueda.firma === firma &&
+      firmaTipos(chipsTipoProf()) === firma && filasEntradas().length) return;
     await expandirOpcionesBusqueda();
     await quitarChipsAjenos(filtro);
     for (const tipo of filtro.tipos) {
       if (!chipsTipoProf().includes(tipo)) await agregarTipoProf(tipo, filtro.texto);
     }
+    const primera = filasEntradas()[0];
     document.querySelector(SEL.findButton).click();
+    await waitFor(() => filasEntradas()[0] !== primera, { timeout: 10000 });
+    await sleep(800);
+    if (!(await waitFor(() => filasEntradas().length, { timeout: 15000 })))
+      throw new Error('no cargó la lista de registros');
+    ultimaBusqueda = { tuid, firma: firmaTipos(chipsTipoProf()) };
   }
   const aplicarFiltroMedico = () => aplicarFiltroProfesional(CONFIG.notas.medicas);
 
@@ -890,21 +909,17 @@
   // evolución médica anterior, aplica el filtro de médicos y vuelve a buscar.
   // Devuelve { propiaHoy } si el usuario ya guardó su evolución de hoy (no hay que
   // copiar nada), o { previa } con la evolución médica a copiar.
+  // Busca directamente en la lista filtrada por médicos: en la UPC la primera página sin
+  // filtro suele estar llena de registros de enfermería/TENS (una sola búsqueda siempre).
   async function buscarEvolucionAnterior() {
     await abrirRegistroClinico();
     await abrirBusqueda();
     if (!(await waitFor(() => filasEntradas().length, { timeout: 15000 })))
       throw new Error('no cargó la lista de registros');
-    await limpiarFiltrosBusqueda();
+    if (hayFiltrosDeTexto()) await limpiarFiltrosBusqueda();
+    await aplicarFiltroMedico();
     const res = await analizarListaEvoluciones();
     if (res.propiaHoy || res.candidatas.length) return res;
-
-    toast('No está en la primera página: filtrando por médicos…');
-    await aplicarFiltroMedico();
-    await sleep(1500);
-    await waitFor(() => filasEntradas().length, { timeout: 15000 });
-    const filtrada = await analizarListaEvoluciones();
-    if (filtrada.propiaHoy || filtrada.candidatas.length) return filtrada;
     throw new Error('no se encontró una evolución médica anterior');
   }
 
