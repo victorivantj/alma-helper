@@ -1670,13 +1670,16 @@
   }
 
   function decorarIndicaciones() {
-    if (!esMedico()) return;
+    const enfermeria = esEnfermeria();
+    if (!esMedico() && !enfermeria) return;
     const inp = document.querySelector(SEL.indicBuscar);
     const fila = inp?.closest('.componentRow');
     if (!fila || fila.parentElement.querySelector('.almah-examenes')) return;
     const bar = document.createElement('div');
     bar.className = 'almah-examenes';
-    bar.append(
+    // Cuidados de Enfermería (misma pantalla de órdenes): solo el inicio a las 8 AM
+    if (enfermeria) bar.append(filaBarra('Cuidados:', modoCuidados.boton()));
+    else bar.append(
       filaBarra('Indicaciones:',
         ...CONFIG.indicacionesRapidas.map((g) => crearMenu(g.titulo, gruposDeNombres(g), { modo: modoIndicaciones })),
         crearMenu('Fármacos', CONFIG.farmacos, { modo: modoIndicaciones }),
@@ -1830,6 +1833,10 @@
   });
   const modoIndicaciones = crearModoProgramado({
     clave: 'almah-8am', etiqueta: '⏰ Receta 8 AM', titulo: 'Reposo, régimen y fármacos', calcular: horaIndicacionesDelTurno,
+  });
+  // Cuidados de Enfermería (perfil enfermería): misma hora que la receta
+  const modoCuidados = crearModoProgramado({
+    clave: 'almah-8am-enf', etiqueta: '⏰ Inicio 8 AM', titulo: 'Los cuidados', calcular: horaIndicacionesDelTurno,
   });
   // Si quedaron los dos activos (versión anterior), se deja solo la receta
   if (modoExamenes.activo && modoIndicaciones.activo) modoExamenes.desactivar({ restaurar: false, aviso: false });
@@ -2573,10 +2580,8 @@
       resaltarMedicamentos();
     }
     if (h.includes('OEOrder.EntryPortal')) {
-      modoExamenes.revisar();
-      modoIndicaciones.revisar();
-      modoExamenes.aplicarSiHaceFalta();
-      modoIndicaciones.aplicarSiHaceFalta();
+      modosProgramados.forEach((m) => m.revisar());
+      modosProgramados.forEach((m) => m.aplicarSiHaceFalta());
       filtrarBusquedaIndicaciones();
       decorarIndicaciones();
     }
