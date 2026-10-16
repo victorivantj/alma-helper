@@ -271,6 +271,7 @@
     editorNotas: 'NOTNotesHTMLRichText', // instancia CKEditor
     chartMenuCaption: '[id^="tc_Chart-menu-"][id$="-caption"]',
     chartMenuSeleccionado: '.chartMenuItem.chartMenuSelected',
+    chartSubSeleccionada: '.chartMenuSubItem.chartMenuSelected [id$="-caption"]',
     // Filas de las listas de indicaciones (Medicamentos - Atención Actual / Todas las Atenciones)
     ordenRow: 'tr[id^="OEOrdItem_ListEMR_"]',
     ordenTexto: '[id$="-item-TextRepresentation"]',
@@ -627,10 +628,87 @@
   // N° de episodio del paciente abierto (null si no hay banner, p. ej. en el mapa)
   const episodioActual = () => document.querySelector(SEL.episodioPaciente)?.textContent.trim() || null;
 
+  // ---------------------------------------------------------------------------
+  // Salto directo a una pestaña del RCE (sin menú, Registro Clínico ni portada del RCE)
+  // ---------------------------------------------------------------------------
+  // ALMA identifica cada pestaña con #/Chart/<libro>/<pestaña>?TUID=<llave del paciente>.
+  // La llave de cada paciente se mantiene durante la sesión; libro y pestaña son iguales
+  // para todos los pacientes pero cambian al iniciar sesión. Se aprenden al pasar por las
+  // pantallas (sin peticiones extra): llaves solo en memoria; rutas en sessionStorage.
+  // Solo se anota un par que se mantiene ≥ 1,5 s (no durante el cambio de pantalla).
+  // Tras saltar se valida el paciente (nombre del encabezado) y la pestaña; si falla, se
+  // olvida lo aprendido y se usa el camino normal.
+  const llavesPaciente = new Map(); // nombre del paciente → TUID de sus pestañas del RCE
+  let rutasRCE = {};
+  try { rutasRCE = JSON.parse(sessionStorage.getItem('almah-rutas-rce') || '{}'); } catch (e) { /* sin storage */ }
+  const guardarRutas = () => {
+    try { sessionStorage.setItem('almah-rutas-rce', JSON.stringify(rutasRCE)); } catch (e) { /* sin storage */ }
+  };
+  const pendientesAprender = new Map(); // clave → { valor, t }
+
+  function confirmado(clave, valor) {
+    const p = pendientesAprender.get(clave);
+    if (p && p.valor === valor) return Date.now() - p.t >= 1500;
+    pendientesAprender.set(clave, { valor, t: Date.now() });
+    return false;
+  }
+
+  // Pestaña abierta del RCE: la subpestaña seleccionada o, si no hay, la pestaña principal
+  const pestanaAbierta = () => (document.querySelector(SEL.chartSubSeleccionada) ||
+    document.querySelector(`${SEL.chartMenuSeleccionado} ${SEL.chartMenuCaption}`))?.textContent.trim() || '';
+
+  let relojAprender = null;
+  function aprenderRutasRCE() {
+    const m = location.hash.match(/^#\/Chart\/([^/?]+)\/([^/?]+)\?(?:.*&)?TUID=(\d+)/);
+    if (!m) return;
+    const [, libro, pestana, tuid] = m;
+    const nombre = document.querySelector(SEL.bannerNombre)?.textContent.trim();
+    const tab = normalizar(pestanaAbierta());
+    const ruta = `${libro}/${pestana}`;
+    let falta = false;
+    if (nombre && llavesPaciente.get(nombre) !== tuid) {
+      if (confirmado(`llave|${nombre}`, tuid)) llavesPaciente.set(nombre, tuid); else falta = true;
+    }
+    if (tab && rutasRCE[tab] !== ruta) {
+      if (confirmado(`ruta|${tab}`, ruta)) {
+        rutasRCE[tab] = ruta;
+        guardarRutas();
+      } else falta = true;
+    }
+    // La página puede quedar quieta: se vuelve a mirar para confirmar
+    if (falta && !relojAprender) {
+      relojAprender = setTimeout(() => { relojAprender = null; if (activo) aprenderRutasRCE(); }, 1600);
+    }
+  }
+
+  // Paciente de la acción: el de la cama (botón del mapa) o el del encabezado (ficha)
+  const nombreParaAccion = (actionBtn) => {
+    const bed = actionBtn?.closest?.(SEL.bed);
+    return (bed ? bed.querySelector(SEL.bedNombre) : document.querySelector(SEL.bannerNombre))?.textContent.trim();
+  };
+
+  // true si llegó a `tab` del paciente correcto; false si no se conoce el camino o falló
+  async function saltarAPestanaRCE(tab, actionBtn) {
+    const nombre = nombreParaAccion(actionBtn);
+    const tuid = nombre && llavesPaciente.get(nombre);
+    const ruta = rutasRCE[normalizar(tab)];
+    if (!tuid || !ruta) return false;
+    location.hash = `#/Chart/${ruta}?TUID=${tuid}&TUID=0&Dialog=2`;
+    const ok = await waitFor(() => normalizar(pestanaAbierta()) === normalizar(tab) &&
+      document.querySelector(SEL.bannerNombre)?.textContent.trim() === nombre, { timeout: 12000 });
+    if (ok) return true;
+    llavesPaciente.delete(nombre);
+    delete rutasRCE[normalizar(tab)];
+    guardarRutas();
+    if (medicion.activa) console.info('[ALMA Helper] salto directo falló; se usa el camino normal:', tab);
+    return false;
+  }
+
   // Registro Clínico → RCE → Medicamentos
   async function medicamentos(actionBtn) {
     const capMedicamentos = () =>
       [...document.querySelectorAll(SEL.chartMenuCaption)].find((c) => c.textContent.trim() === 'Medicamentos');
+    if (!capMedicamentos() && (await saltarAPestanaRCE('Medicamentos', actionBtn))) return;
     if (!capMedicamentos()) {
       await abrirRegistroClinico(actionBtn);
       document.querySelector(SEL.panelRCE).click();
@@ -646,6 +724,7 @@
   async function abrirSubpestanaRCE(grupo, sub, actionBtn) {
     const capGrupo = () => [...document.querySelectorAll(SEL.chartMenuCaption)]
       .find((c) => /^tc_Chart-menu-\d+-caption$/.test(c.id) && normalizar(c.textContent) === normalizar(grupo));
+    if (!capGrupo() && (await saltarAPestanaRCE(sub, actionBtn))) return;
     if (!capGrupo()) {
       await abrirRegistroClinico(actionBtn);
       document.querySelector(SEL.panelRCE).click();
@@ -2210,6 +2289,7 @@
     actualizarPanelContextual();
     actualizarMedsFlotante();
     actualizarSignosFlotante();
+    if (h.startsWith('#/Chart/')) aprenderRutasRCE();
   }
 
   // Deja ALMA como sin el script: quita botones, barras, resaltados y filtros
