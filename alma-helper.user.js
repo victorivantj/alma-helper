@@ -151,6 +151,8 @@
     // las 08:00 del día anterior (la receta del turno que sigue en curso)
     horaIndicaciones: 8,
     corteIndicaciones: 6,
+    // Mínimo entre dos búsquedas seguidas al agregar varios ítems (Lab diario, Coronario…)
+    pausaBusquedaIndicMs: 1500,
     // Signos vitales sin abrir la pantalla (Parámetros Clínicos → Signos Vitales (v)):
     // identificadores internos de esa pantalla en ALMA (iguales entre sesiones).
     signosVitales: {
@@ -158,6 +160,7 @@
       chartId: 'wZgJ17zHeXMe7_79KnTXFg',
       chart: '1061',
       vigenciaMin: 30, // no se vuelven a pedir si se consultaron hace menos
+      mapaMin: 15,     // números internos de las camas: se reutilizan (validando el nombre)
       // Aviso si el último control completo es más antiguo que esto (minutos), según el
       // nivel de la cama: tipo de cama del mapa ("Cama Critica - UCI" / "Cama Crítica - UTI")
       // o, si no se conoce, el nombre de la unidad. Las salas no tienen aviso.
@@ -1653,6 +1656,7 @@
 
   // Busca cada ítem (examen, indicación o fármaco) y presiona su "+": solo lo agrega a
   // la lista de pendientes. Ítem: { buscar, nombre } o, para fármacos, { buscar, producto }.
+  let ultimaBusquedaIndic = 0;
   async function agregarExamenes(set, nota = '') {
     const inp = document.querySelector(SEL.indicBuscar);
     if (!inp) throw new Error('abra la página de Indicaciones');
@@ -1669,6 +1673,10 @@
       const yaEsta = (nombre) => segmentos().some((g) => g === clave(nombre) || (item.via && g.startsWith(clave(nombre))));
       if (yaEsta(etiqueta)) { omitidos.push(etiqueta); continue; }
       toast(`${set.titulo}: agregando ${etiqueta} (${i + 1}/${set.items.length})…`, false, 20000);
+      // Pausa mínima entre búsquedas: ALMA deja de responder si se buscan muchas seguidas
+      const espera = ultimaBusquedaIndic + CONFIG.pausaBusquedaIndicMs - Date.now();
+      if (espera > 0) await sleep(espera);
+      ultimaBusquedaIndic = Date.now();
       inp.focus();
       inp.value = item.buscar;
       inp.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1977,19 +1985,24 @@
     return r.json();
   }
 
-  // Números internos de las camas del mapa ("Cama 198" → { id, episodeId, mradm }).
-  // Se vuelven a pedir si tienen más de 1 min, para no usar los de un paciente que ya se fue.
+  // Números internos de las camas del mapa ("Cama 198" → { id, episodeId, mradm, nombre }).
+  // Se reutilizan mapaMin minutos; al usarlos se compara el nombre con el de la tarjeta (si
+  // cambió el paciente de la cama, se vuelven a pedir). La respuesta pesa ~35–135 KB.
   let camasMapa = { contexto: null, t: 0, porCama: new Map(), pidiendo: null };
-  function datosCamasMapa() {
+  function datosCamasMapa({ forzar = false } = {}) {
     const ctx = paramHash('CONTEXT');
-    if (camasMapa.contexto === ctx && Date.now() - camasMapa.t < 60000) return Promise.resolve(camasMapa.porCama);
+    if (!forzar && camasMapa.contexto === ctx && Date.now() - camasMapa.t < CONFIG.signosVitales.mapaMin * 60000) {
+      return Promise.resolve(camasMapa.porCama);
+    }
     if (camasMapa.pidiendo?.ctx === ctx) return camasMapa.pidiendo.promesa; // una sola petición a la vez
     const promesa = postRouter('system.Router.cls?TFLOORPLAN=1',
       [['TUID', paramHash('TUID')], ['TUID', '0'], ['CONTEXT', ctx], ['Dialog', paramHash('Dialog') || '0']])
       .then((j) => {
         const porCama = new Map();
-        (j.beds || []).forEach((b) => b.patient && porCama.set(String(b.description).trim(),
-          { id: b.patient.id, episodeId: b.patient.episodeId, mradm: b.patient.mradm }));
+        (j.beds || []).forEach((b) => b.patient && porCama.set(String(b.description).trim(), {
+          id: b.patient.id, episodeId: b.patient.episodeId, mradm: b.patient.mradm,
+          nombre: textoHtml(b.patient.dataHeaders?.[0]?.value),
+        }));
         camasMapa = { contexto: ctx, t: Date.now(), porCama, pidiendo: null };
         return porCama;
       })
@@ -2106,8 +2119,9 @@
     const cama = bed.querySelector('[id$="-header-title"]')?.textContent.trim();
     if (!nombre || !cama) return;
     try {
-      const ids = (await datosCamasMapa()).get(cama);
-      if (!ids) throw new Error('no se encontró la cama en los datos del mapa');
+      let ids = (await datosCamasMapa()).get(cama);
+      if (ids?.nombre !== nombre) ids = (await datosCamasMapa({ forzar: true })).get(cama); // cambió el paciente
+      if (!ids || ids.nombre !== nombre) throw new Error('los datos del mapa no coinciden con la cama; recarga el mapa');
       await cargarSignos(nombre, [['EpisodeID', ids.episodeId], ['PatientID', ids.id], ['mradm', ids.mradm]], { forzar });
     } catch (e) {
       toast(`Signos vitales (${cama}): ${e.message}`, true);
@@ -2123,7 +2137,6 @@
       return;
     }
     toast(`Cargando signos vitales de ${pendientes.length} camas…`);
-    camasMapa.t = 0; // números internos frescos
     for (let i = 0; i < pendientes.length; i += 3) {
       await Promise.all(pendientes.slice(i, i + 3).map((b) => cargarSignosCama_(b, { forzar })));
     }
@@ -2187,10 +2200,12 @@
       return;
     }
     let e = signos.get(nombre);
-    if (!e || (!e.cargando && !fresco(e))) {
+    // Plegada: no se pide nada hasta que la abras
+    if (!svPlegado && (!e || (!e.cargando && !fresco(e)))) {
       medir('Signos vitales (ficha, automático)', () => cargarSignos(nombre, [])); // llave de la página
       e = signos.get(nombre);
     }
+    e = e || { tomas: [], consultado: 0, sinCargar: true };
     if (!win) {
       win = document.createElement('div');
       win.id = 'almah-sv-flot';
@@ -2201,6 +2216,7 @@
         svPlegado = win.classList.toggle('almah-collapsed');
         try { localStorage.setItem('almah-sv-plegado', svPlegado ? '1' : '0'); } catch (err) { /* sin storage */ }
         posicionSV(win);
+        if (!svPlegado) actualizarSignosFlotante(); // al abrirla se cargan, si hace falta
       }, (w) => {
         const r = w.getBoundingClientRect();
         try { localStorage.setItem('almah-sv-pos', JSON.stringify({ top: r.top, left: r.left })); } catch (err) { /* sin storage */ }
@@ -2225,7 +2241,8 @@
       const titulo = document.createElement('span');
       titulo.textContent = '📈 Signos vitales';
       const info = document.createElement('small');
-      info.textContent = e.cargando ? 'cargando…' : lineas[0] ? `última toma ${horaCorta(lineas[0].t)}` : '';
+      info.textContent = e.cargando ? 'cargando…' : e.sinCargar ? 'sin cargar (ábrela)' :
+        lineas[0] ? `última toma ${horaCorta(lineas[0].t)}` : '';
       if (atrasada) {
         info.classList.add('almah-sv-atrasada');
         info.title = `Último control completo hace más de ${limite / 60} h (cama ${nivel.toUpperCase()})`;
@@ -2235,10 +2252,11 @@
       head.append(titulo, info, flecha);
       cuerpo.replaceChildren();
       if (e.cargando) cuerpo.append('Cargando…');
+      else if (e.sinCargar) cuerpo.append('Sin cargar');
       else if (e.error && !e.tomas.length) cuerpo.append(`No se pudieron cargar (${e.error})`);
       else if (!e.tomas.length) cuerpo.append('Sin signos vitales registrados');
       else cuerpo.appendChild(tablaSignos(e.tomas.slice(0, 6), atrasada));
-      if (!e.cargando) {
+      if (!e.cargando && !e.sinCargar) {
         const pie = document.createElement('div');
         pie.className = 'almah-sv-pie';
         pie.append(`consultado ${haceMin(e.consultado)} `,
