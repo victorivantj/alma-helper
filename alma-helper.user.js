@@ -1975,7 +1975,11 @@
   }
 
   let medsPlegado = false;
-  try { medsPlegado = localStorage.getItem('almah-meds-plegado') === '1'; } catch (e) { /* sin storage */ }
+  let otrasAbiertas = false; // "Otras atenciones" plegada por defecto
+  try {
+    medsPlegado = localStorage.getItem('almah-meds-plegado') === '1';
+    otrasAbiertas = localStorage.getItem('almah-otras-abiertas') === '1';
+  } catch (e) { /* sin storage */ }
 
   // Ventana flotante (abajo a la izquierda por defecto, arrastrable, se pliega con un clic)
   function actualizarMedsFlotante() {
@@ -2044,7 +2048,20 @@
         e.actuales.forEach((f) => lista.append(item(f.texto, f.espera ? 'almah-espera' : '')));
         if (!e.actuales.length) lista.append(item('Sin fármacos vigentes en esta atención'));
         if (e.otras.length) {
-          lista.append(item('Otras atenciones', 'almah-sep'));
+          // Plegada por defecto; un clic la abre o cierra (se recuerda)
+          const sep = item('', 'almah-sep');
+          const rotular = () => { sep.textContent = `${otrasAbiertas ? '▾' : '▸'} Otras atenciones (${e.otras.length})`; };
+          rotular();
+          sep.title = 'Mostrar u ocultar los fármacos de otras atenciones';
+          sep.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            otrasAbiertas = !otrasAbiertas;
+            try { localStorage.setItem('almah-otras-abiertas', otrasAbiertas ? '1' : '0'); } catch (err) { /* sin storage */ }
+            lista.classList.toggle('almah-otras-cerradas', !otrasAbiertas);
+            rotular();
+          });
+          lista.classList.toggle('almah-otras-cerradas', !otrasAbiertas);
+          lista.append(sep);
           e.otras.forEach((f) => lista.append(item(f.texto, `almah-otra${f.espera ? ' almah-espera' : ''}`)));
         }
       }
@@ -2788,7 +2805,10 @@
     #almah-meds-flot .almah-sv-pie { padding: 0 10px 6px; color: #80868b; font-size: 10px; display: flex; gap: 6px; align-items: center; }
     #almah-meds-flot .almah-sv-pie .almah-btn { padding: 0 4px; font-size: 10px; }
     #almah-meds-flot.almah-collapsed .almah-meds-cuerpo { display: none; }
-    #almah-meds-flot li.almah-sep { list-style: none; margin: 6px 0 2px -16px; font-weight: 600; color: #5f6368; font-size: 11px; }
+    #almah-meds-flot li.almah-sep { list-style: none; margin: 6px 0 2px -16px; font-weight: 600; color: #5f6368; font-size: 11px;
+      cursor: pointer; user-select: none; }
+    #almah-meds-flot li.almah-sep:hover { color: #007067; }
+    #almah-meds-flot ul.almah-otras-cerradas li.almah-otra { display: none; }
     #almah-meds-flot li.almah-otra { color: #80868b; }
     #almah-meds-flot li.almah-espera::after { content: 'en espera'; font: 700 9.5px/1.6 system-ui, sans-serif;
       color: #fff; background: #e37400; border-radius: 3px; padding: 0 4px; margin-left: 6px; vertical-align: middle; }
