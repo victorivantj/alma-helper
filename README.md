@@ -31,7 +31,7 @@ Para publicar una versión, sube el número en `@version` y en `VERSION`, y haz 
 | 🔒 Cerrar notas | Alt+B | Bloquea (candado) tus registros de hoy y de ayer (cualquier profesional), con confirmación y la lista de lo que se bloqueará. |
 | 📝 Notas médicas | Alt+N | Registro Clínico → Búsqueda filtrada por médicos. |
 | 🩹 / 🏃 / 🧑‍⚕️ Notas por profesión | Alt+1 / 2 / 3 | Enfermería, kinesiología y TENS (perfil no médico ni enfermería). Si no hay notas de esa profesión, lo avisa. |
-| 📝 Evolución enf | Alt+E | Perfil enfermería: como Evolucionar, con tu evolución de enfermería (copia la anterior de enfermería). |
+| 📝 Evolución enf | Alt+E | Perfil enfermería: abre (o crea) tu evolución de enfermería de hoy y pega la plantilla (`CONFIG.plantillaEvolucionEnfermeria`); no copia evoluciones anteriores. |
 | 🛏️ Cuidados enf | Alt+I | Perfil enfermería: abre «Cuidados de Enfermería» de tu entrada de hoy (si no existe, pregunta antes de crearla). |
 | 👥 Notas otros | Alt+2 | Perfil enfermería: menú para ver notas de TENS, kinesiología, fonoaudiología o terapia ocupacional. |
 | ✍️ Indicaciones | Alt+I | Abre Indicaciones. Barra con Reposo, Régimen, Fármacos, Hemoglucotest, exámenes por grupo (Perfiles, Cardiaco, Hemato, Coagulación, Endocrino, Nefro/HE, UPC, Hepático/páncreas, Microbiológico, Autoinmune) y los modos ⏰ Receta 8 AM / 🧪 Lab 6 AM, que dejan la fecha y hora de la cabecera a esa hora para todo lo que se agregue (uno a la vez; al apagarlo vuelve a la hora actual). Solo perfil médico. Oculta ítems poco usados en la búsqueda. |
