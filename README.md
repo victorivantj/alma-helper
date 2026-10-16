@@ -36,7 +36,7 @@ Para publicar una versión, sube el número en `@version` y en `VERSION`, y haz 
 | 💊 Prescripción vigente | — | Ventana flotante en la ficha del paciente con lo vigente y lo por renovar según Medicamentos, con nombres abreviados por vía (VO, EV, SC, IM). Caduca al cambiar el turno. |
 | 🧪 Laboratorios | Alt+L | Resultados de Laboratorio - Atención Actual. |
 | 📄 Documentos | Alt+O | Imágenes y Documentos del Paciente; en la lista, 👁 Ver muestra cada documento en una ventana flotante. |
-| 📈 Signos vitales | Alt+V | Abre Signos Vitales. Sin abrirla: 📈 SV en cada cama (o "Cargar todas") muestra la última toma, y la ficha muestra una ventana con las últimas tomas. Aviso si el último control completo tiene más de 2 h (UCI) o 4 h (UTI). |
+| 📈 Signos vitales | Alt+V | Abre Signos Vitales. Sin abrirla: 📈 SV en cada cama muestra la última toma, y la ficha muestra una ventana con las últimas tomas. Aviso si el último control completo tiene más de 2 h (UCI) o 4 h (UTI). |
 | 👁️ Ocultar terminados | Alt+T | Solo en Medicamentos (con interruptor para apagar el resaltado). |
 | Panel | Alt+A | Muestra/oculta el panel. Incluye interruptor para apagar el script y ❓ Ayuda. |
 

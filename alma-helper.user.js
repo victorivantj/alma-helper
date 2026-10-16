@@ -2044,7 +2044,7 @@
   // Se piden al servidor igual que lo hace la pantalla Signos Vitales (misma petición,
   // con la sesión del usuario). En la ficha basta la llave de la página (TUID); en el mapa
   // se agregan los números internos de cada cama, que el mapa recibe de ALMA.
-  // Solo a pedido (botón 📈 SV / "Cargar todas") o al abrir una ficha; no se vuelven a
+  // Solo a pedido (botón 📈 SV de cada cama) o al abrir una ficha; no se vuelven a
   // pedir si se consultaron hace < vigenciaMin (🔄 fuerza). Se guardan solo en memoria.
   const SV = [
     { c: 'FC', re: /^frecuencia cardiaca/ },
@@ -2217,29 +2217,7 @@
     }
   }
 
-  const cargarSignosTodas = (opciones) => medir('Signos vitales (todas)', () => cargarSignosTodas_(opciones));
-  async function cargarSignosTodas_({ forzar = false } = {}) {
-    const camas = [...document.querySelectorAll(SEL.bed)].filter((b) => b.querySelector(SEL.bedNombre));
-    const pendientes = camas.filter((b) => forzar || !fresco(signos.get(b.querySelector(SEL.bedNombre).textContent.trim())));
-    if (!pendientes.length) {
-      toast(`Signos vitales ya consultados hace menos de ${CONFIG.signosVitales.vigenciaMin} min (🔄 en cada cama para actualizar)`);
-      return;
-    }
-    toast(`Cargando signos vitales de ${pendientes.length} camas…`);
-    for (let i = 0; i < pendientes.length; i += 3) {
-      await Promise.all(pendientes.slice(i, i + 3).map((b) => cargarSignosCama_(b, { forzar })));
-    }
-    toast('Signos vitales cargados');
-  }
-
   function decorarSignosCamas() {
-    const titulo = document.getElementById('tc_Floorplan-misc-header');
-    if (titulo && !titulo.querySelector('.almah-sv-todas') && document.querySelector(SEL.bed)) {
-      const b = mkBtn('📈 Cargar signos vitales (todas)', 'Cargar los últimos signos vitales de todas las camas', () =>
-        cargarSignosTodas());
-      b.classList.add('almah-sv-todas');
-      titulo.appendChild(b);
-    }
     document.querySelectorAll(SEL.bed).forEach((bed) => {
       const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
       const nivel = nombre ? nivelDeCama(bed) : null;
@@ -2441,7 +2419,7 @@
     document.getElementById('almah-panel')?.classList.remove('almah-hay-contexto');
     const flot = document.getElementById('almah-meds-flot');
     if (flot) flot.hidden = true;
-    document.querySelectorAll('.almah-sv, .almah-sv-todas').forEach((e) => e.remove());
+    document.querySelectorAll('.almah-sv').forEach((e) => e.remove());
     const sv = document.getElementById('almah-sv-flot');
     if (sv) sv.hidden = true;
   }
@@ -2479,7 +2457,7 @@
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
       ['🧪 Laboratorios y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
-      ['📈 Signos vitales', `<p><kbd>${t('signosVitales')}</kbd> Abre Parámetros Clínicos → Signos Vitales (v). Sin abrir esa pantalla: <b>📈 SV</b> en cada cama (o <b>📈 Cargar signos vitales (todas)</b> arriba del mapa) muestra la última toma; si es parcial (sin FC o PA), también el control completo anterior. Al abrir una ficha aparece una ventana con las últimas tomas. No se vuelven a consultar antes de 30 min (🔄 para actualizar). La hora se marca en naranjo si el último control completo tiene más de 2 h en camas UCI o 4 h en UTI.</p>`],
+      ['📈 Signos vitales', `<p><kbd>${t('signosVitales')}</kbd> Abre Parámetros Clínicos → Signos Vitales (v). Sin abrir esa pantalla: <b>📈 SV</b> en cada cama muestra la última toma; si es parcial (sin FC o PA), también el control completo anterior. Al abrir una ficha aparece una ventana con las últimas tomas. No se vuelven a consultar antes de 30 min (🔄 para actualizar). La hora se marca en naranjo si el último control completo tiene más de 2 h en camas UCI o 4 h en UTI.</p>`],
     ].filter(Boolean);
 
     const fondo = document.createElement('div');
@@ -2780,7 +2758,6 @@
     .almah-sv .almah-sv-pie, #almah-sv-flot .almah-sv-pie { color: #80868b; font-size: 10px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
     .almah-sv .almah-btn, #almah-sv-flot .almah-sv-pie .almah-btn { padding: 0 4px; font-size: 10px; }
     .almah-sv-atrasada { color: #fff !important; background: #e37400; border-radius: 3px; padding: 0 3px; }
-    .almah-sv-todas { margin-left: 8px; }
     #almah-sv-flot { position: fixed; left: 450px; bottom: 0; z-index: 99998; max-width: 560px; min-width: 240px;
       font: 12px/1.35 system-ui, sans-serif; background: #fff; border: 1px solid #007067; border-radius: 8px 8px 0 0;
       box-shadow: 0 4px 16px rgba(0,0,0,.2); overflow: hidden; }
