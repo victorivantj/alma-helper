@@ -30,17 +30,20 @@ Para publicar una versión, sube el número en `@version` y en `VERSION`, y haz 
 | 🩺 Evolucionar | Alt+E | Crea/abre tu evolución de hoy y copia la evolución más reciente de otro médico. Si hay varias notas médicas recientes (p. ej. nota nocturna y evolución), pregunta cuál copiar. Si ya guardaste la tuya, ofrece editarla o agregar una nota. |
 | 🔒 Cerrar notas | Alt+B | Bloquea (candado) tus registros de hoy y de ayer (cualquier profesional), con confirmación y la lista de lo que se bloqueará. |
 | 📝 Notas médicas | Alt+N | Registro Clínico → Búsqueda filtrada por médicos. |
-| 🩹 / 🏃 / 🧑‍⚕️ Notas por profesión | Alt+1 / 2 / 3 | Enfermería, kinesiología y TENS (perfil no médico). |
-| ✍️ Indicaciones | Alt+I | Abre Indicaciones. Barra con Reposo, Régimen, Fármacos, ⏰ Receta 8 AM, Lab diario, Coronario, Otros exámenes y 🧪 Lab 6 AM (solo perfil médico). Oculta ítems poco usados en la búsqueda. |
+| 🩹 / 🏃 / 🧑‍⚕️ Notas por profesión | Alt+1 / 2 / 3 | Enfermería, kinesiología y TENS (perfil no médico ni enfermería). Si no hay notas de esa profesión, lo avisa. |
+| 📝 Evolución enf | Alt+E | Perfil enfermería: como Evolucionar, con tu evolución de enfermería (copia la anterior de enfermería). |
+| 🛏️ Cuidados enf | Alt+I | Perfil enfermería: abre «Cuidados de Enfermería» de tu entrada de hoy (si no existe, pregunta antes de crearla). |
+| 👥 Notas otros | Alt+2 | Perfil enfermería: menú para ver notas de TENS, kinesiología, fonoaudiología o terapia ocupacional. |
+| ✍️ Indicaciones | Alt+I | Abre Indicaciones. Barra con Reposo, Régimen, Fármacos, Hemoglucotest, exámenes por grupo (Perfiles, Cardiaco, Hemato, Coagulación, Endocrino, Nefro/HE, UPC, Hepático/páncreas, Microbiológico, Autoinmune) y los modos ⏰ Receta 8 AM / 🧪 Lab 6 AM, que dejan la fecha y hora de la cabecera a esa hora para todo lo que se agregue (uno a la vez; al apagarlo vuelve a la hora actual). Solo perfil médico. Oculta ítems poco usados en la búsqueda. |
 | 💊 Medicamentos | Alt+M | Resalta cada indicación según el turno en que se solicitó (los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo): vigente (turno actual), por renovar (turno anterior, aún no indicada de nuevo), terminada o suspendida. |
-| 💊 Prescripción vigente | — | Ventana flotante en la ficha del paciente con lo vigente y lo por renovar según Medicamentos, con nombres abreviados por vía (VO, EV, SC, IM). Caduca al cambiar el turno. |
+| 💊 Fármacos vigentes | — | Ventana flotante en la ficha del paciente con la sección «Fármacos Vigentes» de ALMA, con nombres abreviados por vía (VO, EV, SC, IM) y etiqueta «en espera». Primero la atención actual; las otras atenciones, aparte y plegadas. |
 | 🧪 Laboratorios | Alt+L | Resultados de Laboratorio - Atención Actual. |
 | 📄 Documentos | Alt+O | Imágenes y Documentos del Paciente; en la lista, 👁 Ver muestra cada documento en una ventana flotante. |
 | 📈 Signos vitales | Alt+V | Abre Signos Vitales. Sin abrirla: 📈 SV en cada cama muestra la última toma, y la ficha muestra una ventana con las últimas tomas. Aviso si el último control completo tiene más de 2 h (UCI) o 4 h (UTI). |
 | 👁️ Ocultar terminados | Alt+T | Solo en Medicamentos (con interruptor para apagar el resaltado). |
 | Panel | Alt+A | Muestra/oculta el panel. Incluye interruptor para apagar el script y ❓ Ayuda. |
 
-El perfil (médico u otro profesional) se detecta del *Grupo de Seguridad* del usuario.
+El perfil (médico, enfermería u otro profesional) se detecta del *Grupo de Seguridad* del usuario.
 
 ## Configuración
 
