@@ -127,31 +127,13 @@
         ] },
       ] },
     ],
-    // Exámenes frecuentes (barra en la página de Indicaciones). Cada ítem:
-    //   buscar: texto que se escribe en "Búsqueda de Indicaciones" (¡distingue tildes!)
-    //   nombre: inicio exacto del nombre en los resultados (sin importar mayúsculas)
-    // Un clic solo AGREGA a la lista de pendientes; nunca guarda.
-    examenes: [
-      { titulo: '🧪 Lab diario', items: [
-        { buscar: 'hemograma', nombre: 'Hemograma' },
-        { buscar: 'Proteina C Reactiva', nombre: 'Proteina C Reactiva' },
-        { buscar: 'electrolitos', nombre: 'Electrolitos plasmáticos' },
-        { buscar: 'creatinin', nombre: 'Creatinina, en sangre' },
-        { buscar: 'urea', nombre: '(UREA) Nitrógeno ureico' },
-      ] },
-      { titulo: '🫀 Coronario', items: [
-        { buscar: 'troponina', nombre: 'Troponina' },
-        { buscar: 'creatinquinasa', nombre: 'Creatinquinasa CK - total' },
-        { buscar: 'creatinquinasa', nombre: 'Creatinquinasa CK - MB' },
-      ] },
-    ],
     // Botón "🧪 Lab 6 AM": hora a la que se programan los exámenes (si ya pasó hoy, mañana)
     horaExamenes: 6,
     // Botón "⏰ Receta 8 AM" (reposo, régimen y fármacos): las 08:00 del día; antes de las 06:00,
     // las 08:00 del día anterior (la receta del turno que sigue en curso)
     horaIndicaciones: 8,
     corteIndicaciones: 6,
-    // Mínimo entre dos búsquedas seguidas al agregar varios ítems (Lab diario, Coronario…)
+    // Mínimo entre dos búsquedas seguidas al agregar varios ítems (p. ej. IgA, IgG e IgM)
     pausaBusquedaIndicMs: 1500,
     // Signos vitales sin abrir la pantalla (Parámetros Clínicos → Signos Vitales (v)):
     // identificadores internos de esa pantalla en ALMA (iguales entre sesiones).
@@ -171,8 +153,10 @@
       nivelNinguno: /psiquiatr/,
     },
     // Menús de exámenes por grupo (uno por grupo, en la barra "Exámenes:"). Cada opción agrega
-    // un ítem ({ titulo, buscar, nombre }) o varios ({ titulo, items: [...] }). Los nombres son
-    // los de ALMA (se compara sin tildes ni mayúsculas: igual o el inicio del nombre).
+    // un ítem ({ titulo, buscar, nombre }) o varios ({ titulo, items: [...] }).
+    //   buscar: texto que se escribe en "Búsqueda de Indicaciones" (¡distingue tildes!)
+    //   nombre: nombre en ALMA (sin tildes ni mayúsculas: igual o el inicio del nombre)
+    // Un clic solo AGREGA a la lista de pendientes; nunca guarda.
     examenesGrupos: [
       { titulo: 'Perfiles', items: [
         { titulo: 'Perfil bioquímico', buscar: 'perfil bioq', nombre: 'Perfil Bioquímico' },
@@ -195,8 +179,12 @@
           { buscar: 'transferrina', nombre: 'Transferrina' },
         ] },
         { titulo: 'Ferritina', buscar: 'ferritina', nombre: 'FERRITINA' },
+      ] },
+      { titulo: 'Coagulación', items: [
         { titulo: 'TP/INR', buscar: 'protrombina', nombre: 'Tiempo de protrombina' },
         { titulo: 'TTPA', buscar: 'tromboplastina', nombre: 'Tromboplastina, tiempo parcial' },
+        { titulo: 'Fibrinógeno', buscar: 'fibrinogeno', nombre: 'Fibrinogeno' },
+        { titulo: 'Dímero-D', buscar: 'dímero', nombre: 'Dímero-D' },
       ] },
       { titulo: 'Endocrino', items: [
         { titulo: 'TSH', buscar: 'tsh', nombre: 'Tiroestimulante (TSH)' },
@@ -207,7 +195,21 @@
       { titulo: 'Nefro/HE', items: [
         { titulo: 'Electrolitos', buscar: 'electrolitos', nombre: 'Electrolitos plasmáticos' },
         { titulo: 'Gases venosos', buscar: 'gases', nombre: 'GASES VENOSOS' },
+        { titulo: 'Creatinina', buscar: 'creatinin', nombre: 'Creatinina, en sangre' },
+        { titulo: 'BUN (urea)', buscar: 'urea', nombre: '(UREA) Nitrógeno ureico' },
+        { titulo: 'Magnesio', buscar: 'magnesio', nombre: 'Magnesio' },
+        { titulo: 'Fósforo', buscar: 'fosforo', nombre: 'Fosforo en sangre' },
+        { titulo: 'Calcio', buscar: 'calcio', nombre: 'Calcio, en sangre' },
+        { titulo: 'Calcio iónico', buscar: 'calcio', nombre: 'Calcio ionico' },
+      ] },
+      { titulo: 'UPC', items: [
+        { titulo: 'Procalcitonina', buscar: 'procalcitonina', nombre: 'Procalcitonina' },
         { titulo: 'Gases arteriales (incluye lactato)', buscar: 'gases', nombre: 'Gases arteriales' },
+      ] },
+      { titulo: 'Hepático/páncreas', items: [
+        { titulo: 'Amilasa', buscar: 'amilasa', nombre: 'Amilasa, en sangre' },
+        { titulo: 'Lipasa', buscar: 'lipasa', nombre: 'Lipasa en sangre' },
+        { titulo: 'Bilirrubina total y conjugada', buscar: 'bilirrubina', nombre: 'Bilirrubina total y conjugada' },
       ] },
       { titulo: 'Microbiológico', items: [
         { titulo: 'Hemocultivo periférico', buscar: 'hemocultivo', nombre: 'Hemocultivo periferico' },
@@ -216,6 +218,9 @@
         { titulo: 'Cultivo aspirado traqueal', buscar: 'cultivo corriente', nombre: 'CULTIVO CORRIENTE/ASPIRADO TRAQUEAL' },
         { titulo: 'Cultivo líquido pleural', buscar: 'cultivo corriente/liquido p', nombre: 'CULTIVO CORRIENTE/LIQUIDO PLEURAL' },
         { titulo: 'Cultivo líquido peritoneal', buscar: 'cultivo corriente/liquido p', nombre: 'CULTIVO CORRIENTE/LIQUIDO PERITONEAL' },
+        { titulo: 'Urocultivo (segundo chorro)', buscar: 'urocultivo', nombre: 'UROCULTIVO ORINA SEGUNDO CHORRO' },
+        { titulo: 'Urocultivo (catéter permanente)', buscar: 'urocultivo', nombre: 'UROCULTIVO ORINA CATÉTER PERMANENTE' },
+        { titulo: 'Urocultivo (sondeo)', buscar: 'urocultivo', nombre: 'UROCULTIVO ORINA POR SONDEO' },
         { titulo: 'CMV IgG e IgM', items: [
           { buscar: 'citomegalo', nombre: 'CITOMEGALOVIRUS (CMV) ANTICUERPOS IGG' },
           { buscar: 'citomegalo', nombre: 'CITOMEGALOVIRUS (CMV) ANTICUERPOS IGM' },
@@ -1577,12 +1582,6 @@
         crearMenu('Hemoglucotest', CONFIG.hemoglucotest, { modo: modoIndicaciones }),
         modoIndicaciones.boton()),
       filaBarra('Exámenes:',
-        ...CONFIG.examenes.map((set) => {
-          const b = mkBtn(set.titulo, `Agregar a la lista: ${set.items.map((i) => i.nombre).join(', ')}`, () =>
-            run(set.titulo, () => agregarExamenesProgramados(set)));
-          b.classList.add('almah-set');
-          return b;
-        }),
         ...CONFIG.examenesGrupos.map((g) => crearMenu(g.titulo, [{ items: g.items }], { modo: modoExamenes })),
         modoExamenes.boton()),
     );
@@ -1734,8 +1733,6 @@
   // Si quedaron los dos activos (versión anterior), se deja solo la receta
   if (modoExamenes.activo && modoIndicaciones.activo) modoExamenes.desactivar({ restaurar: false, aviso: false });
 
-  // Agrega exámenes respetando el modo 6 AM
-  const agregarExamenesProgramados = (set) => modoExamenes.agregar((nota) => agregarExamenes(set, nota));
 
   // Busca cada ítem (examen, indicación o fármaco) y presiona su "+" (ver agregarExamenes).
   // Nombre "específico" de un resultado: el producto (desc2, p. ej. "ENOXAPARINA JERINGA
@@ -2478,7 +2475,7 @@
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
-        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Hemoglucotest ▾</b> y, en exámenes, <b>Lab diario</b>, <b>Coronario</b> y los menús <b>Perfiles</b>, <b>Cardiaco</b>, <b>Hemato</b>, <b>Endocrino</b>, <b>Nefro/HE</b>, <b>Microbiológico</b> y <b>Autoinmune</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
+        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Hemoglucotest ▾</b> y, en exámenes, los menús <b>Perfiles</b>, <b>Cardiaco</b>, <b>Hemato</b>, <b>Coagulación</b>, <b>Endocrino</b>, <b>Nefro/HE</b>, <b>UPC</b>, <b>Hepático/páncreas</b>, <b>Microbiológico</b> y <b>Autoinmune</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
       ['🧪 Laboratorios y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
@@ -2744,7 +2741,6 @@
     .almah-select { font: 11px system-ui, sans-serif; color: #00554e; background: #e8f4f3;
       border: 1px solid #007067; border-radius: 4px; padding: 1px 2px; max-width: 160px; cursor: pointer; }
     .almah-examenes-titulo { font: 600 11px system-ui, sans-serif; color: #00554e; margin-right: 2px; }
-    .almah-examenes .almah-set { font-weight: 700; background: #d7efec; }
     .almah-examenes .almah-programar.almah-activo { background: #e37400; border-color: #e37400; color: #fff; font-weight: 700; }
     #almah-panel .almah-btn[data-accion="ocultarTerminados"] { background: #fff4e0; border-color: #e37400; color: #8a4500; }
     #almah-panel .almah-btn[data-accion="ocultarTerminados"]:hover { background: #e37400; color: #fff; }
