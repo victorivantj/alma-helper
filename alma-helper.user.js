@@ -1836,7 +1836,7 @@
       }
       bar.append(
         mkBtn('🔒 Cerrar', 'Bloquear mis evoluciones y notas de hoy y de ayer', () =>
-          run('Cerrar evoluciones y notas', () => cerrarEvolucion(actionBtn))
+          run('Cerrar notas', () => cerrarEvolucion(actionBtn))
         ),
         mkBtn('📝 Notas MD', 'Notas médicas de este paciente', () =>
           run('Notas médicas', () => notasMedicas(actionBtn))
@@ -1894,7 +1894,7 @@
   // perfil: 'medico' u 'otro' (sin perfil: para todos). Ver perfilActual().
   const TODAS_LAS_ACCIONES = [
     { id: 'evolucion', label: '🩺 Evolucionar', fn: () => evolucionDelDia(), perfil: 'medico' },
-    { id: 'cerrarEvolucion', label: '🔒 Cerrar evoluciones y notas', fn: () => cerrarEvolucion() },
+    { id: 'cerrarEvolucion', label: '🔒 Cerrar notas', fn: () => cerrarEvolucion() },
     { id: 'notasMedicas', label: '📝 Notas médicas', fn: () => notasMedicas() },
     { id: 'notasEnfermeria', label: '🩹 Notas de enfermería', fn: () => notasDe('enfermeria'), perfil: 'otro' },
     { id: 'notasKinesiologia', label: '🏃 Notas de kinesiología', fn: () => notasDe('kinesiologia'), perfil: 'otro' },
@@ -2511,7 +2511,7 @@
       ['Botones en cada cama (mapa de piso)', `<p>Accesos directos a las funciones del paciente sin pasar por el menú <b>•••</b>.</p>`],
       ['💊 Fármacos vigentes', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra la sección <b>Fármacos Vigentes</b> de ALMA, sin abrir ninguna pantalla: primero los de esta atención y aparte, en gris, los de otras atenciones; los <b>en espera</b> llevan etiqueta. Los nombres se abrevian por vía (VO, EV, SC, IM). No se vuelve a consultar antes de 30 min (🔄 para actualizar) ni si la ventana está plegada. Un clic en su título la pliega o despliega, y se puede arrastrar.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
-      ['🔒 Cerrar evoluciones y notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
+      ['🔒 Cerrar notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
