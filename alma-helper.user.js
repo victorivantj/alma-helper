@@ -353,13 +353,94 @@
   // Evita ejecutar dos flujos a la vez (doble clic, atajo repetido)
   let busy = false;
   const TIEMPO_MAXIMO = 150000; // ms: si una acción se cuelga, se libera el script
+  // ---------------------------------------------------------------------------
+  // Medición de peticiones a ALMA (solo depuración: localStorage 'almah-debug' = '1')
+  // ---------------------------------------------------------------------------
+  // Cuenta cada petición al servidor de ALMA (no archivos estáticos) y la asigna a la acción
+  // del script en curso; las de ALMA sin acción del script quedan aparte. Las direcciones se
+  // guardan sin valores (salvo el nombre del componente o pantalla), nunca datos del paciente.
+  // En la consola: almahMedicion() muestra el total por acción; almahMedicionReiniciar()
+  // lo borra; almahEtiqueta('Notas a mano') etiqueta lo que hagas a mano, para comparar.
+  const medicion = { activa: false, accion: null, registros: [] };
+  try { medicion.activa = localStorage.getItem('almah-debug') === '1'; } catch (e) { /* sin storage */ }
+
+  function rutaSegura(url) {
+    const u = new URL(url, location.href);
+    const claves = /^(TCOMPONENT|TCHART|TREQUESTTYPE|TFLOORPLAN|TLAYOUT|THASDATA|TCHARTITEM|TDATAONLYCALL|TUNLOCK|WARGC)$/;
+    const q = [...u.searchParams.entries()].filter(([k]) => claves.test(k)).map(([k, v]) => `${k}=${v}`);
+    return u.pathname.replace(/^\/sscq\/(csp\/)?/, '') + (q.length ? `?${q.join('&')}` : '');
+  }
+
+  const kb = (bytes) => Math.round(bytes / 102.4) / 10;
+  function resumenMedicion(registros) {
+    const porRuta = {};
+    registros.forEach((r) => {
+      const k = `${r.quien}: ${r.ruta}`;
+      porRuta[k] = porRuta[k] || { peticiones: 0, KB: 0 };
+      porRuta[k].peticiones++;
+      porRuta[k].KB = Math.round((porRuta[k].KB + r.kb) * 10) / 10;
+    });
+    return porRuta;
+  }
+
+  if (medicion.activa) {
+    try {
+      new PerformanceObserver((lista) => lista.getEntries().forEach((e) => {
+        if (!e.name.startsWith(location.origin) || /\.(js|css|png|gif|svg|jpe?g|woff2?|ico)(\?|$)/.test(e.name)) return;
+        medicion.registros.push({
+          t: Date.now(), accion: medicion.accion || '(ALMA, sin acción del script)', ruta: rutaSegura(e.name),
+          kb: kb(e.transferSize || 0), quien: e.initiatorType === 'fetch' ? 'script' : 'ALMA',
+        });
+      })).observe({ type: 'resource' });
+    } catch (e) { /* sin PerformanceObserver */ }
+    window.almahMedicion = () => {
+      const porAccion = {};
+      medicion.registros.forEach((r) => {
+        porAccion[r.accion] = porAccion[r.accion] || { peticiones: 0, KB: 0, delScript: 0 };
+        porAccion[r.accion].peticiones++;
+        porAccion[r.accion].KB = Math.round((porAccion[r.accion].KB + r.kb) * 10) / 10;
+        if (r.quien === 'script') porAccion[r.accion].delScript++;
+      });
+      console.table(porAccion);
+      return porAccion;
+    };
+    window.almahMedicionDetalle = (accion) => {
+      const t = resumenMedicion(medicion.registros.filter((r) => r.accion === accion));
+      console.table(t);
+      return t;
+    };
+    window.almahMedicionReiniciar = () => { medicion.registros = []; };
+    window.almahEtiqueta = (nombre) => { medicion.accion = nombre || null; };
+    console.info('[ALMA Helper] Medición de peticiones activa: almahMedicion(), almahMedicionDetalle(acción), almahEtiqueta(nombre)');
+  }
+
+  // Ejecuta fn atribuyéndole las peticiones que ocurran mientras dura (y 1,5 s después)
+  async function medir(nombre, fn) {
+    if (!medicion.activa) return fn();
+    const previa = medicion.accion;
+    medicion.accion = nombre;
+    const desde = medicion.registros.length;
+    try {
+      return await fn();
+    } finally {
+      await sleep(1500);
+      if (medicion.accion === nombre) medicion.accion = previa;
+      const regs = medicion.registros.slice(desde).filter((r) => r.accion === nombre);
+      const total = Math.round(regs.reduce((a, r) => a + r.kb, 0) * 10) / 10;
+      console.groupCollapsed(`[ALMA Helper] ${nombre}: ${regs.length} peticiones · ${total} KB`);
+      console.table(resumenMedicion(regs));
+      console.groupEnd();
+      toast(`📊 ${nombre}: ${regs.length} peticiones · ${total} KB`, false, 6000);
+    }
+  }
+
   async function run(name, fn) {
     if (busy) return;
     busy = true;
     let reloj;
     try {
       await Promise.race([
-        fn(),
+        medir(name, fn),
         new Promise((_, rechazar) => {
           reloj = setTimeout(() => rechazar(new Error('se agotó el tiempo de espera; intente de nuevo')), TIEMPO_MAXIMO);
         }),
@@ -1894,7 +1975,8 @@
   }
 
   // ---- Mapa de camas ----
-  async function cargarSignosCama(bed, { forzar = false } = {}) {
+  const cargarSignosCama = (bed, opciones) => medir('Signos vitales (cama)', () => cargarSignosCama_(bed, opciones));
+  async function cargarSignosCama_(bed, { forzar = false } = {}) {
     const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
     const cama = bed.querySelector('[id$="-header-title"]')?.textContent.trim();
     if (!nombre || !cama) return;
@@ -1907,7 +1989,8 @@
     }
   }
 
-  async function cargarSignosTodas({ forzar = false } = {}) {
+  const cargarSignosTodas = (opciones) => medir('Signos vitales (todas)', () => cargarSignosTodas_(opciones));
+  async function cargarSignosTodas_({ forzar = false } = {}) {
     const camas = [...document.querySelectorAll(SEL.bed)].filter((b) => b.querySelector(SEL.bedNombre));
     const pendientes = camas.filter((b) => forzar || !fresco(signos.get(b.querySelector(SEL.bedNombre).textContent.trim())));
     if (!pendientes.length) {
@@ -1917,7 +2000,7 @@
     toast(`Cargando signos vitales de ${pendientes.length} camas…`);
     camasMapa.t = 0; // números internos frescos
     for (let i = 0; i < pendientes.length; i += 3) {
-      await Promise.all(pendientes.slice(i, i + 3).map((b) => cargarSignosCama(b, { forzar })));
+      await Promise.all(pendientes.slice(i, i + 3).map((b) => cargarSignosCama_(b, { forzar })));
     }
     toast('Signos vitales cargados');
   }
@@ -1980,7 +2063,7 @@
     }
     let e = signos.get(nombre);
     if (!e || (!e.cargando && !fresco(e))) {
-      cargarSignos(nombre, []); // llave de la página: el paciente abierto
+      medir('Signos vitales (ficha, automático)', () => cargarSignos(nombre, [])); // llave de la página
       e = signos.get(nombre);
     }
     if (!win) {
