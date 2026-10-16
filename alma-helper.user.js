@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ALMA Helper (TrakCare)
 // @namespace    https://github.com/victorivantj/alma-helper
-// @version      0.17.3
+// @version      0.17.9
 // @description  [BETA, en desarrollo] Atajos y mejoras para ALMA/TrakCare: evolucionar, notas por profesión, indicaciones frecuentes y medicamentos resaltados.
 // @author       Victor Tapia
 // @homepageURL  https://victorivantj.github.io/alma-helper/
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.17.3';
+  const VERSION = '0.17.9';
   const PAGINA_WEB = 'https://victorivantj.github.io/alma-helper/';
 
   // ---------------------------------------------------------------------------
