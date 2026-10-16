@@ -894,6 +894,10 @@
     await abrirRegistroClinico(actionBtn);
     const p = await waitFor(SEL.panelPlanCuidado, { timeout: 10000 });
     if (!p) throw new Error('no apareció "Plan de Cuidado" en Registro Clínico');
+    // ALMA lo habilita solo con una entrada de hoy (igual que "Actual")
+    if (p.getAttribute('aria-disabled') === 'true') {
+      throw new Error('"Plan de Cuidado" está deshabilitado en ALMA para este paciente (se habilita cuando hay una entrada de hoy)');
+    }
     p.click();
   }
 
