@@ -113,18 +113,13 @@
       tipoACopiar: /evoluci|ingreso/i,
       profesional: /\(Enfermer/,                                 // "(Enfermera (o))"
     },
-    // Plantilla de la evolución de enfermería (HTML del editor; una línea por <p>)
+    // Plantilla de la evolución de enfermería ('' = línea en blanco)
     plantillaEvolucionEnfermeria: [
-      'EVOLUCIÓN DE ENFERMERÍA',
-      'Neurológico: ',
-      'Hemodinámico: ',
-      'Respiratorio: ',
-      'Digestivo / alimentación: ',
-      'Eliminación: ',
-      'Piel y accesos (VVP, CVC, sondas, drenajes): ',
-      'Dolor: ',
-      'Procedimientos / exámenes: ',
-      'Plan / pendientes: ',
+      'ESTADO DEL PACIENTE: ', '',
+      'IDENTIFICACIÓN DE NECESIDADES: ', '',
+      'DELIRIUM/SEGURIDAD: ', '',
+      'PLAN Y PENDIENTES: ', '',
+      'OBJETIVOS DEL DIA: ',
     ],
     // Indicaciones frecuentes: un menú desplegable por grupo (nombres exactos de ALMA).
     // Se busca por el nombre completo; un clic solo AGREGA a la lista de pendientes.
@@ -1353,7 +1348,7 @@
       return;
     }
     const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    await escribirEnEditor(CONFIG.plantillaEvolucionEnfermeria.map((l) => `<p>${esc(l)}</p>`).join(''));
+    await escribirEnEditor(CONFIG.plantillaEvolucionEnfermeria.map((l) => `<p>${esc(l) || '&nbsp;'}</p>`).join(''));
     toast('Plantilla pegada. Complétala y guarda tú.', false, 6000);
   }
 
