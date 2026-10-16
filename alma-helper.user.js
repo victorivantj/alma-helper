@@ -691,10 +691,10 @@
     }
     const primera = filasEntradas()[0];
     document.querySelector(SEL.findButton).click();
+    // La lista cambia (o queda vacía si no hay notas de ese tipo: no es un error)
     await waitFor(() => filasEntradas()[0] !== primera, { timeout: 10000 });
     await sleep(800);
-    if (!(await waitFor(() => filasEntradas().length, { timeout: 15000 })))
-      throw new Error('no cargó la lista de registros');
+    await waitFor(() => filasEntradas().length, { timeout: 3000 });
     ultimaBusqueda = { tuid, firma: firmaTipos(chipsTipoProf()) };
   }
   const aplicarFiltroMedico = () => aplicarFiltroProfesional(CONFIG.notas.medicas);
@@ -706,7 +706,7 @@
     await abrirRegistroClinico(actionBtn);
     await abrirBusqueda();
     await aplicarFiltroProfesional(filtro);
-    toast(`${filtro.titulo} filtradas ✔`);
+    toast(filasEntradas().length ? `${filtro.titulo} filtradas ✔` : `No hay ${filtro.titulo.toLowerCase()} en este paciente`);
   }
   const notasMedicas = (actionBtn) => notasDe('medicas', actionBtn);
 
