@@ -153,11 +153,11 @@
     // las 08:00 del día anterior (la receta del turno que sigue en curso)
     horaIndicaciones: 8,
     // ⚙️ Programar (Cuidados de Enfermería, bajo cada ítem por guardar): prioridad, frecuencia
-    // (nombre en ALMA), duración "Hasta" la próxima hora `fin` y horas del Modelo Dosificación
+    // (nombre en ALMA), duración "Por N Día(s)" y horas del Modelo Dosificación
     programarCuidados: {
       prioridad: 'Normal',
-      fin: '07:59',
-      dias: [1, 3, 5], // duración: hasta las 07:59 del último día (1 día = mañana 07:59)
+      dias: [1, 3, 5], // con inicio 08:00, ALMA deja la Fecha Fin a las 07:59 del último día
+      unidadDias: 'Día(s)',
       opciones: [
         { titulo: 'Cada 24 h (06)', frecuencia: 'CADA 24 HORAS', horas: ['06:00'] },
         { titulo: 'Cada 12 h (18 y 06)', frecuencia: 'CADA 12 HORAS', horas: ['18:00', '06:00'] },
@@ -1673,10 +1673,13 @@
   }
 
   // ---- ⚙️ Programar un cuidado de enfermería ya agregado (sin guardar la indicación) ----
-  // Abre el ítem, pone prioridad, frecuencia, duración "Hasta" (próximas 07:59 desde el
-  // inicio), las horas del Modelo Dosificación y presiona Guardar del detalle, que solo lo
+  // Abre el ítem, pone prioridad, frecuencia, duración "Por N Día(s)", las horas del Modelo Dosificación y presiona Guardar del detalle, que solo lo
   // deja listo en la lista: la enfermera revisa y guarda con su contraseña.
-  const textoPendiente = (row) => row.textContent.replace(/\s+/g, ' ').trim();
+  const textoPendiente = (row) => {
+    const c = row.cloneNode(true);
+    c.querySelectorAll('.almah-prog-fila').forEach((e) => e.remove());
+    return c.textContent.replace(/\s+/g, ' ').trim();
+  };
 
   function decorarPendientesCuidados() {
     for (const row of pendientes()) {
@@ -1684,12 +1687,12 @@
       const celda = [...row.querySelectorAll('td')].find((td) => td.textContent.includes('\u2014')) || row.lastElementChild;
       const sel = document.createElement('select');
       sel.className = 'almah-select almah-prog-item';
-      sel.title = 'Prioridad normal, frecuencia, duración hasta las 07:59 y horario (no guarda la indicación)';
+      sel.title = 'Prioridad normal, frecuencia, duración y horario (no guarda la indicación)';
       sel.appendChild(new Option('⚙️ Programar ▾', ''));
       CONFIG.programarCuidados.opciones.forEach((o, i) => sel.appendChild(new Option(o.titulo, String(i))));
       const dias = document.createElement('select');
       dias.className = 'almah-select';
-      dias.title = 'Duración (hasta las 07:59 del último día)';
+      dias.title = 'Duración (Por N días)';
       CONFIG.programarCuidados.dias.forEach((n) => dias.appendChild(new Option(`${n} día${n > 1 ? 's' : ''}`, String(n))));
       for (const el of [sel, dias]) for (const ev of ['click', 'mousedown', 'mouseup']) el.addEventListener(ev, (e) => e.stopPropagation());
       sel.addEventListener('change', () => {
@@ -1711,7 +1714,7 @@
     inp.value = texto;
     inp.dispatchEvent(new Event('input', { bubbles: true }));
     const fila = await waitFor(() => [...document.querySelectorAll(`tr[id^="${id}-lookupRow-"]`)]
-      .find((r) => normalizar(r.querySelector('td')?.textContent || '') === normalizar(texto)), { timeout: 8000 });
+      .find((r) => normalizar(r.querySelector('td')?.textContent || '').trim() === normalizar(texto)), { timeout: 8000 });
     if (!fila) throw new Error(`no encontré "${texto}" en ${campo}`);
     fila.click();
     if (!(await waitFor(() => normalizar(inp.value) === normalizar(texto), { timeout: 5000 })))
@@ -1725,18 +1728,6 @@
     if (el.value !== valor) fijarCampo(el, valor);
   }
 
-  // Próxima hora `fin` (07:59) después del inicio dd/mm/aaaa hh:mm, más los días extra
-  function finDelTurno(fecha, hora, dias = 1) {
-    const [d, m, a] = fecha.split('/').map(Number);
-    const [hh, mm] = hora.split(':').map(Number);
-    const [fh, fm] = CONFIG.programarCuidados.fin.split(':').map(Number);
-    const inicio = new Date(a, m - 1, d, hh, mm);
-    const fin = new Date(a, m - 1, d, fh, fm);
-    if (fin <= inicio) fin.setDate(fin.getDate() + 1);
-    fin.setDate(fin.getDate() + dias - 1);
-    return fechaHora(fin, 0).fecha;
-  }
-
   async function programarCuidado(texto, op, dias = 1) {
     const row = pendientes().find((r) => textoPendiente(r) === texto);
     if (!row) throw new Error('el ítem ya no está en la lista');
@@ -1748,14 +1739,12 @@
     toast(`Programando: ${op.titulo}…`);
     await elegirLookup('OECPRDesc', CONFIG.programarCuidados.prioridad);
     await elegirLookup('RMFrequency', op.frecuencia);
-    await elegirLookup('ITM2DurationType', 'Hasta');
-    const inicioF = document.querySelector(SEL.detalle('OEORISttDat')).value;
-    const inicioH = document.querySelector(SEL.detalle('OEORISttTim')).value;
-    const fin = finDelTurno(inicioF, inicioH, dias);
-    escribirDetalle('OEORIEndDate', fin);
+    await elegirLookup('ITM2DurationType', 'Por');
+    escribirDetalle('ITM2DurationValue', String(dias));
     await sleep(500);
-    escribirDetalle('OEORIEndTime', CONFIG.programarCuidados.fin);
+    await elegirLookup('ITM2DurationUnit', CONFIG.programarCuidados.unidadDias);
     await sleep(1200);
+    const fin = `${document.querySelector(SEL.detalle('OEORIEndDate'))?.value} ${document.querySelector(SEL.detalle('OEORIEndTime'))?.value}`;
     // Modelo Dosificación: una fila por hora
     document.querySelector(SEL.detalleDosis)?.click();
     const horas = await waitFor(() => {
@@ -1775,7 +1764,7 @@
     await sleep(800);
     document.querySelector(SEL.detalleGuardar)?.click();
     if (!(await waitFor(() => pendientes().length, { timeout: 15000 }))) throw new Error('no volvió a la lista');
-    toast(`Programado: ${op.titulo}, hasta ${fin} ${CONFIG.programarCuidados.fin}. Revisa y guarda con tu contraseña.`, false, 7000);
+    toast(`Programado: ${op.titulo}, por ${dias} día${dias > 1 ? 's' : ''} (hasta ${fin}). Revisa y guarda con tu contraseña.`, false, 7000);
   }
 
   // Reposo/Régimen: opciones con el nombre exacto de ALMA ("REGIMEN CERO" → "CERO")
