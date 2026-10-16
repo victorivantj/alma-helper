@@ -697,10 +697,15 @@
     const tuid = nombre && llavesPaciente.get(nombre);
     const ruta = rutasRCE[normalizar(tab)];
     if (!tuid || !ruta) return false;
+    const antes = location.hash;
     location.hash = `#/Chart/${ruta}?TUID=${tuid}&TUID=0&Dialog=2`;
-    const ok = await waitFor(() => pestanasAbiertas().includes(normalizar(tab)) &&
-      document.querySelector(SEL.bannerNombre)?.textContent.trim() === nombre, { timeout: 12000 });
-    if (ok) return true;
+    // 'ok' = pestaña y paciente correctos; 'otro' = cargó con otro paciente (se corrige al tiro)
+    const r = await waitFor(() => {
+      if (location.hash === antes || !pestanasAbiertas().includes(normalizar(tab))) return null;
+      const enBanner = document.querySelector(SEL.bannerNombre)?.textContent.trim();
+      return enBanner === nombre ? 'ok' : enBanner && confirmado(`otro|${tab}`, enBanner) ? 'otro' : null;
+    }, { timeout: 12000 });
+    if (r === 'ok') return true;
     llavesPaciente.delete(nombre);
     delete rutasRCE[normalizar(tab)];
     guardarRutas();
