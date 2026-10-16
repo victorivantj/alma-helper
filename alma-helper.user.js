@@ -1042,7 +1042,7 @@
     await aplicarFiltroProfesional(configEvolucion().filtro);
     const res = await analizarListaEvoluciones();
     if (res.propiaHoy || res.candidatas.length) return res;
-    throw new Error('no se encontró una evolución médica anterior');
+    throw new Error(`no se encontró una evolución ${esEnfermeria() ? 'de enfermería' : 'médica'} anterior`);
   }
 
   // Expande la fila (si hace falta) y devuelve el bloque con el texto de la nota
@@ -1118,7 +1118,7 @@
   // Con una sola candidata la usa; con varias pregunta cuál copiar (null = cancelado)
   async function elegirEvolucion(candidatas) {
     if (candidatas.length === 1) return candidatas[0];
-    const valor = await preguntar('Hay varias notas médicas recientes (la hora es la de la entrada). ¿Cuál copiar?',
+    const valor = await preguntar(`Hay varias notas ${esEnfermeria() ? 'de enfermería' : 'médicas'} recientes (la hora es la de la entrada). ¿Cuál copiar?`,
       candidatas.map((c, i) => ({
         valor: i,
         texto: `<b>${escaparHtml(c.fecha)}</b> · ${escaparHtml(c.autor)}` +
