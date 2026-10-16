@@ -1561,29 +1561,36 @@
     el.blur();
   }
 
-  // Ejecuta fn con la cabecera en `objetivo` ({ fecha, hora }) y luego restaura los valores previos
-  async function conInicioProgramado(objetivo, fn) {
+  // Fecha y hora actuales en el formato de la cabecera
+  const ahoraCabecera = () => {
+    const d = new Date();
+    return { fecha: fechaHora(d, 0).fecha, hora: `${dosDigitos(d.getHours())}:${dosDigitos(d.getMinutes())}` };
+  };
+
+  // Escribe { fecha, hora } en "Fecha de Inicio"/"Hora Inicio" de la cabecera
+  async function fijarCabecera(obj) {
     const fd = document.querySelector(SEL.inicioFecha);
     const ft = document.querySelector(SEL.inicioHora);
-    if (!fd || !ft) throw new Error('no se encontraron los campos de Fecha/Hora de inicio');
-    const previo = { fecha: fd.value, hora: ft.value };
-    fijarCampo(fd, objetivo.fecha);
-    await sleep(300);
-    fijarCampo(ft, objetivo.hora);
-    await sleep(500);
-    try {
-      return await fn(objetivo);
-    } finally {
-      fijarCampo(fd, previo.fecha);
+    if (!fd || !ft) return false;
+    if (fd.value !== obj.fecha) {
+      fijarCampo(fd, obj.fecha);
       await sleep(300);
-      fijarCampo(ft, previo.hora);
     }
+    if (ft.value !== obj.hora) {
+      fijarCampo(ft, obj.hora);
+      await sleep(300);
+    }
+    return true;
   }
 
-  // clave: sessionStorage; titulo: para avisos ("Exámenes"); que: para el tooltip
-  // etiqueta: texto del botón ("🧪 Lab 6 AM"); activo agrega la fecha corta ("✓ 16/10")
-  function crearModoProgramado({ clave, etiqueta, titulo, que, calcular }) {
-    const m = { activo: false, episodio: null };
+  // Botones ⏰ Receta 8 AM / 🧪 Lab 6 AM: solo uno activo a la vez. Activo, la cabecera
+  // queda en su hora, así todo lo que se agregue (menús del script o buscador de ALMA) toma
+  // esa hora; al desactivarlo vuelve a la fecha y hora actuales. Se mantiene mientras sigas
+  // en el mismo paciente (al volver a Indicaciones se reaplica); con otro paciente se apaga.
+  // clave: sessionStorage; titulo: para avisos; etiqueta: texto del botón (activo agrega "✓ 16/10")
+  const modosProgramados = [];
+  function crearModoProgramado({ clave, etiqueta, titulo, calcular }) {
+    const m = { activo: false, episodio: null, campo: null };
     try {
       const g = JSON.parse(sessionStorage.getItem(clave) || 'null');
       if (g) Object.assign(m, { activo: g.activo, episodio: g.episodio });
@@ -1597,50 +1604,74 @@
       b.setAttribute('aria-pressed', String(m.activo));
       b.textContent = m.activo ? `${etiqueta} ✓ ${fecha.slice(0, 5)}` : etiqueta;
       b.title = m.activo
-        ? `Activo (solo para este paciente): ${que} que agregues desde aquí quedan para el ${fecha} a las ${hora}. Clic para desactivar.`
-        : `Clic para programar ${que} que agregues desde aquí para las ${hora} (${fecha}).`;
+        ? `Activo (solo para este paciente): la cabecera quedó en ${fecha} ${hora}; todo lo que agregues (menús o buscador) queda a esa hora. Clic para volver a la hora actual.`
+        : `Clic para dejar la cabecera en ${fecha} ${hora}: ${titulo.toLowerCase()} y todo lo que agregues quedará a esa hora.`;
     };
-    const botones = () => document.querySelectorAll(`[data-almah-modo="${clave}"]`);
-    // Apaga el modo si cambió el paciente; devuelve true si se apagó
+    const redibujar = () => document.querySelectorAll('[data-almah-modo]').forEach((b) =>
+      modosProgramados.find((o) => o.clave === b.dataset.almahModo)?.actualizar(b));
+    Object.assign(m, { clave, actualizar });
+    m.activar = async () => {
+      for (const o of modosProgramados) if (o !== m && o.activo) await o.desactivar({ restaurar: false, aviso: false });
+      Object.assign(m, { activo: true, episodio: episodioActual() });
+      guardar();
+      redibujar();
+      const obj = calcular();
+      await fijarCabecera(obj);
+      m.campo = document.querySelector(SEL.inicioFecha);
+      toast(`${etiqueta}: la cabecera quedó en ${obj.fecha} ${obj.hora}; lo que agregues queda a esa hora`, false, 5000);
+    };
+    m.desactivar = async ({ restaurar = true, aviso = true } = {}) => {
+      Object.assign(m, { activo: false, episodio: null, campo: null });
+      guardar();
+      redibujar();
+      if (restaurar) await fijarCabecera(ahoraCabecera());
+      if (aviso) toast(`${etiqueta} desactivado: la cabecera vuelve a la fecha y hora actuales`);
+    };
+    // Apaga el modo si cambió el paciente (la cabecera de la otra ficha no se toca)
     m.revisar = () => {
       const ep = episodioActual();
       if (!m.activo || !ep || ep === m.episodio) return false;
-      Object.assign(m, { activo: false, episodio: null });
-      guardar();
-      botones().forEach(actualizar);
+      m.desactivar({ restaurar: false, aviso: false });
       toast(`${etiqueta} desactivado: cambiaste de paciente`);
       return true;
+    };
+    // Al (re)abrir Indicaciones con el modo activo, la cabecera nueva se ajusta una vez
+    m.aplicarSiHaceFalta = () => {
+      const fd = document.querySelector(SEL.inicioFecha);
+      if (!m.activo || !fd || fd === m.campo) return;
+      m.campo = fd;
+      fijarCabecera(calcular());
     };
     m.boton = () => {
       const b = mkBtn('', '', () => {
         m.revisar();
-        Object.assign(m, { activo: !m.activo, episodio: m.activo ? null : episodioActual() });
-        guardar();
-        botones().forEach(actualizar);
-        const { fecha, hora } = calcular();
-        toast(m.activo ? `${etiqueta}: ${titulo} se programarán para el ${fecha} a las ${hora}` : `${etiqueta} desactivado: ${titulo.toLowerCase()} con la hora actual`);
+        run(etiqueta, () => (m.activo ? m.desactivar() : m.activar()));
       });
       b.classList.add('almah-programar');
       b.dataset.almahModo = clave;
       actualizar(b);
       return b;
     };
-    // agregar(nota): agrega a la lista; con el modo activo, con la cabecera programada
-    m.agregar = (agregar) => {
+    // agregar(nota): con el modo activo se asegura la cabecera antes de agregar
+    m.agregar = async (agregar) => {
       m.revisar();
       if (!m.activo) return agregar('');
-      return conInicioProgramado(calcular(), (obj) => agregar(`programados para ${obj.fecha} ${obj.hora}`));
+      const obj = calcular();
+      await fijarCabecera(obj);
+      return agregar(`programados para ${obj.fecha} ${obj.hora}`);
     };
+    modosProgramados.push(m);
     return m;
   }
 
   const modoExamenes = crearModoProgramado({
-    clave: 'almah-6am', etiqueta: '🧪 Lab 6 AM', titulo: 'Exámenes', que: 'los exámenes', calcular: proximaHoraExamenes,
+    clave: 'almah-6am', etiqueta: '🧪 Lab 6 AM', titulo: 'Exámenes', calcular: proximaHoraExamenes,
   });
   const modoIndicaciones = crearModoProgramado({
-    clave: 'almah-8am', etiqueta: '⏰ Receta 8 AM', titulo: 'Reposo, régimen y fármacos', que: 'el reposo, régimen y fármacos',
-    calcular: horaIndicacionesDelTurno,
+    clave: 'almah-8am', etiqueta: '⏰ Receta 8 AM', titulo: 'Reposo, régimen y fármacos', calcular: horaIndicacionesDelTurno,
   });
+  // Si quedaron los dos activos (versión anterior), se deja solo la receta
+  if (modoExamenes.activo && modoIndicaciones.activo) modoExamenes.desactivar({ restaurar: false, aviso: false });
 
   // Agrega exámenes respetando el modo 6 AM
   const agregarExamenesProgramados = (set) => modoExamenes.agregar((nota) => agregarExamenes(set, nota));
@@ -2332,6 +2363,8 @@
     if (h.includes('OEOrder.EntryPortal')) {
       modoExamenes.revisar();
       modoIndicaciones.revisar();
+      modoExamenes.aplicarSiHaceFalta();
+      modoIndicaciones.aplicarSiHaceFalta();
       filtrarBusquedaIndicaciones();
       decorarIndicaciones();
     }
@@ -2384,7 +2417,7 @@
         (medico ? '' : ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS`) +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
-        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>🧪 Lab 6 AM</b> programa los exámenes para las 06:00 (mañana si es antes de medianoche). <b>⏰ Receta 8 AM</b> (junto a Fármacos) programa reposo, régimen y fármacos para las 08:00 del día; entre las 00:00 y las 06:00, para las 08:00 del día anterior. Ambos se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
+        (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Lab diario</b>, <b>Coronario</b> y <b>Otros exámenes ▾</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos.</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
       ['🧪 Laboratorios y 📄 Documentos', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
