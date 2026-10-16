@@ -1769,17 +1769,23 @@
 
   // Números internos de las camas del mapa ("Cama 198" → { id, episodeId, mradm }).
   // Se vuelven a pedir si tienen más de 1 min, para no usar los de un paciente que ya se fue.
-  let camasMapa = { contexto: null, t: 0, porCama: new Map() };
-  async function datosCamasMapa() {
+  let camasMapa = { contexto: null, t: 0, porCama: new Map(), pidiendo: null };
+  function datosCamasMapa() {
     const ctx = paramHash('CONTEXT');
-    if (camasMapa.contexto === ctx && Date.now() - camasMapa.t < 60000) return camasMapa.porCama;
-    const j = await postRouter('system.Router.cls?TFLOORPLAN=1',
-      [['TUID', paramHash('TUID')], ['TUID', '0'], ['CONTEXT', ctx], ['Dialog', paramHash('Dialog') || '0']]);
-    const porCama = new Map();
-    (j.beds || []).forEach((b) => b.patient && porCama.set(String(b.description).trim(),
-      { id: b.patient.id, episodeId: b.patient.episodeId, mradm: b.patient.mradm }));
-    camasMapa = { contexto: ctx, t: Date.now(), porCama };
-    return porCama;
+    if (camasMapa.contexto === ctx && Date.now() - camasMapa.t < 60000) return Promise.resolve(camasMapa.porCama);
+    if (camasMapa.pidiendo?.ctx === ctx) return camasMapa.pidiendo.promesa; // una sola petición a la vez
+    const promesa = postRouter('system.Router.cls?TFLOORPLAN=1',
+      [['TUID', paramHash('TUID')], ['TUID', '0'], ['CONTEXT', ctx], ['Dialog', paramHash('Dialog') || '0']])
+      .then((j) => {
+        const porCama = new Map();
+        (j.beds || []).forEach((b) => b.patient && porCama.set(String(b.description).trim(),
+          { id: b.patient.id, episodeId: b.patient.episodeId, mradm: b.patient.mradm }));
+        camasMapa = { contexto: ctx, t: Date.now(), porCama, pidiendo: null };
+        return porCama;
+      })
+      .finally(() => { if (camasMapa.pidiendo?.promesa === promesa) camasMapa.pidiendo = null; });
+    camasMapa.pidiendo = { ctx, promesa };
+    return promesa;
   }
 
   // Tomas (más nueva primero): [{ t: Date, v: { FC: '82', PA: '120/70', … } }]
