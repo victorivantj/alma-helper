@@ -179,6 +179,8 @@
     ],
     // Ventana "Fármacos vigentes": sección de la portada del RCE (identificadores internos)
     farmacosVigentes: { chartBookId: '167', chart: '442', item: '9', vigenciaMin: 30 },
+    // Ventana "Interconsultas": Evaluación Especialista - Atención Actual (identificadores internos)
+    interconsultas: { chartBookId: '167', chartId: 'AkRWoAZB8E7cc90O5rGSNg', chart: '469', item: '0' },
     // Signos vitales sin abrir la pantalla (Parámetros Clínicos → Signos Vitales (v)):
     // identificadores internos de esa pantalla en ALMA (iguales entre sesiones).
     signosVitales: {
@@ -935,6 +937,7 @@
   const examenes = (actionBtn) =>
     abrirSubpestanaRCE('Laboratorio', 'Resultados de Laboratorio - Atencion Actual', actionBtn);
   // Interconsultas solicitadas
+  // (ver también verInterconsultas: ventana flotante sin abrir la página)
   const interconsultas = (actionBtn) =>
     abrirSubpestanaRCE('Evaluación Especialista', 'Evaluación Especialista - Atención Actual', actionBtn);
   const signosVitales = (actionBtn) =>
@@ -2142,8 +2145,8 @@
         mkBtn('📄 Docs', 'Imágenes y documentos del paciente', () =>
           run('Documentos', () => documentos(actionBtn))
         ),
-        mkBtn('📨 IC', 'Interconsultas solicitadas (Evaluación Especialista - Atención Actual)', () =>
-          run('Interconsultas', () => interconsultas(actionBtn))
+        mkBtn('📨 IC', 'Interconsultas en una ventana (Evaluación Especialista - Atención Actual)', () =>
+          run('Interconsultas', () => verInterconsultas({ actionBtn, bed }))
         ),
         mkBtn('📈 SV', 'Cargar aquí los últimos signos vitales (sin abrir la ficha)', () =>
           cargarSignosCama(bed))
@@ -2205,7 +2208,7 @@
     { id: 'medicamentos', label: '💊 Medicamentos', fn: () => medicamentos() },
     { id: 'examenes', label: '🧪 Laboratorios', fn: () => examenes() },
     { id: 'documentos', label: '📄 Documentos', fn: () => documentos() },
-    { id: 'interconsultas', label: '📨 Interconsultas', fn: () => interconsultas() },
+    { id: 'interconsultas', label: '📨 Interconsultas', fn: () => verInterconsultas() },
     { id: 'signosVitales', label: '📈 Signos vitales', fn: () => signosVitales() },
     // soloEn: el botón aparece (resaltado) solo cuando la función devuelve true
     { id: 'ocultarTerminados', label: '👁️ Ocultar terminados', fn: async () => toggleTerminados(),
@@ -2387,6 +2390,94 @@
       }
     }
     posicionMeds(win);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 📨 Interconsultas: ventana flotante con "Evaluación Especialista - Atención Actual",
+  // pedida sola al presionar el botón (~150 KB). Desde el mapa usa los datos de la cama.
+  // Primero las solicitadas (pendientes), luego el resto, de la más nueva a la más antigua.
+  // ---------------------------------------------------------------------------
+  const nombreIC = (n) => n.replace(/^evaluaci[oó]n especialista( en jornada)?:\s*/i, '').replace(/^evaluaci[oó]n\s+/i, '');
+
+  function interconsultasDeRespuesta(cd) {
+    const v = (f, k) => textoHtml(f[k]?.value ?? f[k]);
+    const filas = (cd?.listRows || []).map((f) => ({
+      texto: nombreIC(v(f, 'OrderName')),
+      estado: v(f, 'Status'),
+      pendiente: v(f, 'StatusCode') === 'V',
+      fecha: v(f, 'StartDate').slice(0, 5),
+      local: v(f, 'ReceivLoc'),
+    })).filter((f) => f.texto);
+    return [...filas.filter((f) => f.pendiente), ...filas.filter((f) => !f.pendiente)];
+  }
+
+  async function verInterconsultas({ actionBtn = null, bed = null } = {}) {
+    let campos = [];
+    let titulo = '';
+    if (bed) {
+      const nombre = bed.querySelector(SEL.bedNombre)?.textContent.trim();
+      const cama = bed.querySelector('[id$="-header-title"]')?.textContent.trim();
+      let ids = (await datosCamasMapa()).get(cama);
+      if (ids?.nombre !== nombre) ids = (await datosCamasMapa({ forzar: true })).get(cama); // cambió el paciente
+      if (!ids || ids.nombre !== nombre) throw new Error('los datos del mapa no coinciden con la cama; recarga el mapa');
+      campos = [['EpisodeID', ids.episodeId], ['PatientID', ids.id], ['mradm', ids.mradm]];
+      titulo = cama;
+    } else if (!document.querySelector(SEL.bannerNombre)) {
+      throw new Error('abra primero un paciente');
+    }
+    const win = ventanaIC();
+    const cuerpo = win.querySelector('.almah-ic-cuerpo');
+    win.querySelector('.almah-ic-titulo').textContent = `📨 Interconsultas${titulo ? ` · ${titulo}` : ''}`;
+    win.hidden = false;
+    cuerpo.replaceChildren(Object.assign(document.createElement('div'), { className: 'almah-ic-vacio', textContent: 'Cargando…' }));
+    const cfg = CONFIG.interconsultas;
+    const j = await postRouter(`system.Router.cls?TDATAONLYCALL=1&TCHARTITEM=${cfg.item}&TCHART=${cfg.chart}&TREQUESTTYPE=itemData`,
+      [['TUID', paramHash('TUID')], ['TUID', '0'], ['Dialog', '0'], ['chartBookId', cfg.chartBookId], ['chartId', cfg.chartId], ...campos]);
+    if (!/evaluacion especialista/.test(sinTildes(j.title || ''))) throw new Error('la sección "Evaluación Especialista" cambió en ALMA');
+    const filas = interconsultasDeRespuesta(j.componentData);
+    cuerpo.replaceChildren();
+    if (!filas.length) {
+      cuerpo.append(Object.assign(document.createElement('div'), { className: 'almah-ic-vacio', textContent: 'Sin interconsultas en esta atención' }));
+    } else {
+      const ul = document.createElement('ul');
+      for (const f of filas) {
+        const li = document.createElement('li');
+        if (f.pendiente) li.className = 'almah-ic-pend';
+        li.title = f.local;
+        li.append(Object.assign(document.createElement('span'), { className: 'almah-ic-fecha', textContent: f.fecha }),
+          Object.assign(document.createElement('span'), { className: 'almah-ic-nombre', textContent: f.texto }),
+          Object.assign(document.createElement('span'), { className: 'almah-ic-estado', textContent: f.estado }));
+        ul.append(li);
+      }
+      cuerpo.append(ul);
+    }
+    const pie = document.createElement('div');
+    pie.className = 'almah-sv-pie';
+    pie.append(`consultado ${new Date().toTimeString().slice(0, 5)} `,
+      mkBtn('🔄', 'Volver a consultar', () => run('Interconsultas', () => verInterconsultas({ actionBtn, bed }))),
+      mkBtn('↗ Ver en ALMA', 'Abrir Evaluación Especialista - Atención Actual', () => {
+        win.hidden = true;
+        run('Interconsultas', () => interconsultas(actionBtn));
+      }));
+    cuerpo.append(pie);
+  }
+
+  function ventanaIC() {
+    let win = document.getElementById('almah-ic-flot');
+    if (win) return win;
+    win = document.createElement('div');
+    win.id = 'almah-ic-flot';
+    const head = document.createElement('div');
+    head.className = 'almah-ic-head';
+    head.title = 'Arrastrar para mover';
+    const titulo = Object.assign(document.createElement('span'), { className: 'almah-ic-titulo' });
+    const cerrar = mkBtn('✕', 'Cerrar', () => { win.hidden = true; });
+    cerrar.addEventListener('mousedown', (e) => e.stopPropagation());
+    head.append(titulo, cerrar);
+    hacerArrastrable(win, head, () => {}, () => {});
+    win.append(head, Object.assign(document.createElement('div'), { className: 'almah-ic-cuerpo' }));
+    document.body.appendChild(win);
+    return win;
   }
 
   // Posición guardada { top, left } tras arrastrar; si no, pegada abajo a la izquierda
@@ -2825,7 +2916,7 @@
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Hemoglucotest ▾</b> y, en exámenes, los menús <b>Perfiles</b>, <b>Cardiaco</b>, <b>Hemato</b>, <b>Coagulación</b>, <b>Endocrino</b>, <b>Nefro/HE</b>, <b>UPC</b>, <b>Hepático/páncreas</b>, <b>Microbiológico</b> y <b>Autoinmune</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos, y el interruptor «Ocultar ítems poco usados» apaga el filtro (activo por defecto para médicos, apagado para otros perfiles; se recuerda).</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
-      ['🧪 Laboratorios, 📄 Documentos y 📨 Interconsultas', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente · <kbd>${t('interconsultas')}</kbd> abre Evaluación Especialista - Atención Actual (interconsultas solicitadas; en la cama, 📨 IC). En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
+      ['🧪 Laboratorios, 📄 Documentos y 📨 Interconsultas', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente · <kbd>${t('interconsultas')}</kbd> muestra las interconsultas (Evaluación Especialista - Atención Actual) en una ventana flotante, sin abrir la página: primero las solicitadas, con etiqueta naranja; ↗ Ver en ALMA abre la página completa. En la cama, 📨 IC. En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
       ['📈 Signos vitales', `<p><kbd>${t('signosVitales')}</kbd> Abre Parámetros Clínicos → Signos Vitales (v). Sin abrir esa pantalla: <b>📈 SV</b> en cada cama muestra la última toma; si es parcial (sin FC o PA), también el control completo anterior. Al abrir una ficha aparece una ventana con las últimas tomas. No se vuelven a consultar antes de 30 min (🔄 para actualizar). La hora se marca en naranjo si el último control completo tiene más de 2 h en camas UCI o 4 h en UTI.</p>`],
     ].filter(Boolean);
 
@@ -3110,6 +3201,23 @@
     .almah-btn { cursor: pointer; border: 1px solid #007067; background: #e8f4f3; color: #00554e;
       border-radius: 4px; padding: 2px 6px; font-size: 11px; }
     .almah-btn:hover { background: #007067; color: #fff; }
+    #almah-ic-flot { position: fixed; top: 110px; right: 70px; z-index: 99999; width: 380px; max-width: calc(100vw - 32px);
+      font: 12px/1.35 system-ui, sans-serif; background: #fff; border: 1px solid #007067; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.25); overflow: hidden; }
+    #almah-ic-flot[hidden] { display: none; }
+    #almah-ic-flot .almah-ic-head { background: #007067; color: #fff; padding: 4px 6px 4px 10px; cursor: move;
+      user-select: none; display: flex; align-items: center; font-weight: 700; }
+    #almah-ic-flot .almah-ic-head .almah-btn { margin-left: auto; padding: 0 6px; }
+    #almah-ic-flot ul { list-style: none; margin: 0; padding: 4px 0; max-height: 50vh; overflow-y: auto; color: #222; }
+    #almah-ic-flot li { display: flex; gap: 8px; align-items: baseline; padding: 3px 10px; border-bottom: 1px solid #f1f3f4; }
+    #almah-ic-flot .almah-ic-fecha { color: #80868b; font-size: 11px; flex: none; }
+    #almah-ic-flot .almah-ic-nombre { flex: 1; }
+    #almah-ic-flot .almah-ic-estado { flex: none; font-size: 10.5px; color: #5f6368; }
+    #almah-ic-flot li.almah-ic-pend .almah-ic-estado { color: #fff; background: #e37400; border-radius: 3px; padding: 0 4px; font-weight: 700; }
+    #almah-ic-flot li:not(.almah-ic-pend) { color: #5f6368; }
+    #almah-ic-flot .almah-ic-vacio { padding: 10px; color: #5f6368; }
+    #almah-ic-flot .almah-sv-pie { padding: 4px 10px 6px; color: #80868b; font-size: 10px; display: flex; gap: 6px; align-items: center; }
+    #almah-ic-flot .almah-sv-pie .almah-btn { padding: 0 4px; font-size: 10px; }
     #almah-meds-flot { position: fixed; left: 16px; bottom: 0; z-index: 99998; max-width: 420px; min-width: 220px;
       font: 12px/1.35 system-ui, sans-serif; background: #fff; border: 1px solid #007067; border-radius: 8px 8px 0 0;
       box-shadow: 0 4px 16px rgba(0,0,0,.2); overflow: hidden; }
