@@ -936,7 +936,7 @@
     abrirSubpestanaRCE('Laboratorio', 'Resultados de Laboratorio - Atencion Actual', actionBtn);
   // Interconsultas solicitadas
   const interconsultas = (actionBtn) =>
-    abrirSubpestanaRCE('Procedimientos', 'Evaluación Especialista', actionBtn);
+    abrirSubpestanaRCE('Evaluación Especialista', 'Evaluación Especialista - Atención Actual', actionBtn);
   const signosVitales = (actionBtn) =>
     abrirSubpestanaRCE('Parámetros Clínicos', 'Signos Vitales (v)', actionBtn);
 
@@ -2142,7 +2142,7 @@
         mkBtn('📄 Docs', 'Imágenes y documentos del paciente', () =>
           run('Documentos', () => documentos(actionBtn))
         ),
-        mkBtn('📨 IC', 'Interconsultas solicitadas (Procedimientos → Evaluación Especialista)', () =>
+        mkBtn('📨 IC', 'Interconsultas solicitadas (Evaluación Especialista - Atención Actual)', () =>
           run('Interconsultas', () => interconsultas(actionBtn))
         ),
         mkBtn('📈 SV', 'Cargar aquí los últimos signos vitales (sin abrir la ficha)', () =>
@@ -2825,7 +2825,7 @@
         (medico ? ' Bajo el buscador aparece una barra con <b>Reposo ▾</b>, <b>Régimen ▾</b>, <b>Fármacos ▾</b>, <b>Hemoglucotest ▾</b> y, en exámenes, los menús <b>Perfiles</b>, <b>Cardiaco</b>, <b>Hemato</b>, <b>Coagulación</b>, <b>Endocrino</b>, <b>Nefro/HE</b>, <b>UPC</b>, <b>Hepático/páncreas</b>, <b>Microbiológico</b> y <b>Autoinmune</b>: solo <b>agregan a la lista</b> (sin duplicar), nunca guardan. <b>⏰ Receta 8 AM</b> (junto a Fármacos) deja la cabecera en las 08:00 del día (entre las 00:00 y las 06:00, del día anterior) y <b>🧪 Lab 6 AM</b> en las próximas 06:00: todo lo que agregues, con los menús o con el buscador de ALMA, queda a esa hora. Solo uno puede estar activo; al desactivarlo la cabecera vuelve a la fecha y hora actuales. Se apagan al cambiar de paciente. Los fármacos se agregan con valores por defecto: ajusta dosis y frecuencia.' : '') +
         ' En la búsqueda se ocultan ítems poco usados (órtesis, domiciliarios, pediatría…); el aviso gris permite verlos, y el interruptor «Ocultar ítems poco usados» apaga el filtro (activo por defecto para médicos, apagado para otros perfiles; se recuerda).</p>'],
       ['💊 Medicamentos', `<p><kbd>${t('medicamentos')}</kbd> Abre Medicamentos y resalta cada indicación: <span class="almah-badge almah-badge-vigente">Vigente</span> solicitada en este turno · <span class="almah-badge almah-badge-renovar">Por renovar</span> del turno anterior y aún no indicada de nuevo · <span class="almah-badge almah-badge-terminado">Terminado</span> ya reemplazada, "UNA VEZ" de un turno pasado o más antigua · <span class="almah-badge almah-badge-suspendido">Suspendido</span>. Los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo. "Ocultar terminados" nunca oculta los "Por renovar". El interruptor <b>Resaltado</b> sobre la tabla lo apaga o enciende (se recuerda). <b>👁️ Ocultar terminados</b> (<kbd>${t('ocultarTerminados')}</kbd>) aparece solo en esa pantalla.</p>`],
-      ['🧪 Laboratorios, 📄 Documentos y 📨 Interconsultas', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente · <kbd>${t('interconsultas')}</kbd> abre Procedimientos → Evaluación Especialista (interconsultas solicitadas; en la cama, 📨 IC). En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
+      ['🧪 Laboratorios, 📄 Documentos y 📨 Interconsultas', `<p><kbd>${t('examenes')}</kbd> Abre Laboratorio → Resultados de Laboratorio - Atención Actual · <kbd>${t('documentos')}</kbd> abre Documentos e Imágenes → Imágenes y Documentos del Paciente · <kbd>${t('interconsultas')}</kbd> abre Evaluación Especialista - Atención Actual (interconsultas solicitadas; en la cama, 📨 IC). En esa lista, el botón <b>👁 Ver</b> junto a cada número de "Archivo Imagen" muestra el documento en una ventana flotante sin salir de la lista (Esc la cierra; ↗ lo abre en una pestaña nueva).</p>`],
       ['📈 Signos vitales', `<p><kbd>${t('signosVitales')}</kbd> Abre Parámetros Clínicos → Signos Vitales (v). Sin abrir esa pantalla: <b>📈 SV</b> en cada cama muestra la última toma; si es parcial (sin FC o PA), también el control completo anterior. Al abrir una ficha aparece una ventana con las últimas tomas. No se vuelven a consultar antes de 30 min (🔄 para actualizar). La hora se marca en naranjo si el último control completo tiene más de 2 h en camas UCI o 4 h en UTI.</p>`],
     ].filter(Boolean);
 
