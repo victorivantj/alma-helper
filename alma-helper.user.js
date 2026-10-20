@@ -2534,7 +2534,7 @@
         win.hidden = true;
         run('Interconsultas', () => interconsultas(actionBtn));
       }),
-      mkBtn('🩺 Notas', 'Notas de los interconsultores (Registro Clínico → Búsqueda)', () => {
+      mkBtn('🩺 Ver notas de interconsultores', 'Registro Clínico → Búsqueda con las notas de los interconsultores', () => {
         win.hidden = true;
         run('Notas de interconsultores', () => notasDe('interconsultores', actionBtn));
       }));
