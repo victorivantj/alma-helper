@@ -156,7 +156,7 @@
     // (nombre en ALMA), duración "Por N Día(s)" y horas del Modelo Dosificación
     programarCuidados: {
       prioridad: 'Normal',
-      dias: [1, 3, 5], // con inicio 08:00, ALMA deja la Fecha Fin a las 07:59 del último día
+      dias: [1, 2, 3, 4, 5], // con inicio 08:00, ALMA deja la Fecha Fin a las 07:59 del último día
       unidadDias: 'Día(s)',
       opciones: [
         { titulo: '1 al día (06)', frecuencia: '1 AL DIA', horas: ['06:00'] },
@@ -164,6 +164,9 @@
         { titulo: 'Cada 12 h (10 y 22)', frecuencia: 'CADA 12 HORAS', horas: ['10:00', '22:00'] },
         { titulo: 'Cada 8 h (14, 22 y 06)', frecuencia: 'CADA 8 HORAS', horas: ['14:00', '22:00', '06:00'] },
         { titulo: 'Cada 6 h (12, 18, 24 y 06)', frecuencia: 'CADA 6 HORAS', horas: ['12:00', '18:00', '00:00', '06:00'] },
+        { titulo: 'Cada 4 h', frecuencia: 'CADA 4 HORAS', horas: ['10:00', '14:00', '18:00', '22:00', '02:00', '06:00'] },
+        { titulo: 'Cada 2 h', frecuencia: 'CADA 2 HORAS',
+          horas: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '00:00', '02:00', '04:00', '06:00'] },
       ],
     },
     corteIndicaciones: 6,
@@ -1720,22 +1723,26 @@
     for (const row of pendientes()) {
       if (row.querySelector('.almah-prog-item')) continue;
       const celda = [...row.querySelectorAll('td')].find((td) => td.textContent.includes('\u2014')) || row.lastElementChild;
-      const sel = document.createElement('select');
-      sel.className = 'almah-select almah-prog-item';
-      sel.title = 'Prioridad normal, frecuencia, duración y horario (no guarda la indicación)';
-      sel.appendChild(new Option('⚙️ Programar ▾', ''));
-      CONFIG.programarCuidados.opciones.forEach((o, i) => sel.appendChild(new Option(o.titulo, String(i))));
       const dias = document.createElement('select');
       dias.className = 'almah-select';
       dias.title = 'Duración (Por N días)';
       CONFIG.programarCuidados.dias.forEach((n) => dias.appendChild(new Option(`${n} día${n > 1 ? 's' : ''}`, String(n))));
-      for (const el of [sel, dias]) for (const ev of ['click', 'mousedown', 'mouseup']) el.addEventListener(ev, (e) => e.stopPropagation());
-      sel.addEventListener('change', () => {
+      const sel = document.createElement('select');
+      sel.className = 'almah-select almah-prog-item';
+      sel.title = 'Frecuencia (entre paréntesis, las horas del Modelo Dosificación)';
+      sel.appendChild(new Option('Frecuencia ▾', ''));
+      CONFIG.programarCuidados.opciones.forEach((o, i) => sel.appendChild(new Option(o.titulo, String(i))));
+      // Solo el botón inicia la automatización (elegir en las listas no hace nada)
+      const btn = mkBtn('⚙️ Programar', 'Prioridad normal, frecuencia, duración y horario (no guarda la indicación)', () => {
         const op = CONFIG.programarCuidados.opciones[+sel.value];
-        sel.value = '';
-        if (op) run('Programar', () => programarCuidado(textoPendiente(row), op, +dias.value));
+        if (!sel.value || !op) {
+          toast('Elige primero la frecuencia', true);
+          return;
+        }
+        run('Programar', () => programarCuidado(textoPendiente(row), op, +dias.value));
       });
-      celda.appendChild(Object.assign(document.createElement('div'), { className: 'almah-prog-fila' })).append(dias, sel);
+      for (const el of [sel, dias, btn]) for (const ev of ['click', 'mousedown', 'mouseup']) el.addEventListener(ev, (e) => e.stopPropagation());
+      celda.appendChild(Object.assign(document.createElement('div'), { className: 'almah-prog-fila' })).append(dias, sel, btn);
     }
   }
 
@@ -2737,7 +2744,7 @@
       decorarIndicaciones();
       decorarFiltroIndicaciones();
       filtrarBusquedaIndicaciones();
-      if (esEnfermeria()) decorarPendientesCuidados();
+      if (!esMedico()) decorarPendientesCuidados();
     }
     actualizarPanelContextual();
     actualizarMedsFlotante();
@@ -2785,7 +2792,7 @@
       ['💊 Fármacos vigentes', '<p>Dentro de la ficha, una <b>ventana flotante</b> abajo a la izquierda muestra la sección <b>Fármacos Vigentes</b> de ALMA, sin abrir ninguna pantalla: primero los de esta atención y aparte, en gris, los de otras atenciones; los <b>en espera</b> llevan etiqueta. Los nombres se abrevian por vía (VO, EV, SC, IM). No se vuelve a consultar antes de 30 min (🔄 para actualizar) ni si la ventana está plegada. Un clic en su título la pliega o despliega, y se puede arrastrar.</p>'],
       medico && ['🩺 Evolucionar', `<p><kbd>${t('evolucion')}</kbd> Crea (o abre) tu evolución de hoy y copia el texto de la evolución más reciente de <b>otro médico</b>. Si hay varias notas médicas recientes (p. ej. una nota nocturna y la evolución del día), pregunta cuál copiar mostrando la hora de la entrada, el autor, el largo y el comienzo de cada nota (también cuando están en la misma entrada). Si ya guardaste la tuya, pregunta si quieres <b>editarla</b> o <b>agregar una nota</b>. <b>Nunca guarda</b>: revisa y guarda tú.</p>`],
       ['🔒 Cerrar notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
-      perfil === 'enfermeria' && ['📝 Evolución enf y 🛏️ Cuidados enf', `<p><kbd>${t('evolucion')}</kbd> <b>Evolución enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y pega la plantilla de evolución (si la nota ya tiene texto, no la toca). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('cuidadosEnf')}</kbd> <b>Cuidados enf</b> abre la acción «Cuidados de Enfermería» de tu entrada de hoy (si no la tienes, pregunta antes de crear tu Evolución de Enfermería). Reemplaza a Indicaciones en este perfil; ahí, <b>⏰ Inicio 8 AM</b> deja la fecha y hora de inicio de la cabecera a las 8:00 para todo lo que agregues (clic de nuevo para volver a la hora actual). Bajo cada ítem agregado, elige la duración (1, 3 o 5 días) y <b>⚙️ Programar</b> con la frecuencia: pone prioridad Normal, la frecuencia, «Por N Día(s)» y las horas del Modelo Dosificación (p. ej. cada 12 h a las 18 y 06). No guarda: revisa y guarda con tu contraseña.</p>`],
+      perfil === 'enfermeria' && ['📝 Evolución enf y 🛏️ Cuidados enf', `<p><kbd>${t('evolucion')}</kbd> <b>Evolución enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y pega la plantilla de evolución (si la nota ya tiene texto, no la toca). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('cuidadosEnf')}</kbd> <b>Cuidados enf</b> abre la acción «Cuidados de Enfermería» de tu entrada de hoy (si no la tienes, pregunta antes de crear tu Evolución de Enfermería). Reemplaza a Indicaciones en este perfil; ahí, <b>⏰ Inicio 8 AM</b> deja la fecha y hora de inicio de la cabecera a las 8:00 para todo lo que agregues (clic de nuevo para volver a la hora actual). Bajo cada ítem agregado, elige la duración (1 a 5 días) y la frecuencia, y presiona <b>⚙️ Programar</b>: pone prioridad Normal, la frecuencia, «Por N Día(s)» y las horas del Modelo Dosificación (p. ej. cada 12 h a las 18 y 06). No guarda: revisa y guarda con tu contraseña.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
         (perfil === 'enfermeria' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería (ver) · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: elige TENS, kinesiología, fonoaudiología o terapia ocupacional`
           : perfil === 'otro' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS` : '') +
