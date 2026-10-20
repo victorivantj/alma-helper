@@ -1719,10 +1719,25 @@
     return c.textContent.replace(/\s+/g, ' ').trim();
   };
 
+  // Un ítem con horario personalizado (ALMA agrega "(Variable)") ya está programado: ALMA no
+  // deja cambiarle la frecuencia, así que se marca y se quitan las opciones.
   function decorarPendientesCuidados() {
     for (const row of pendientes()) {
-      if (row.querySelector('.almah-prog-item')) continue;
+      const programado = textoPendiente(row).includes('(Variable)');
+      row.classList.toggle('almah-programado', programado);
+      const actual = row.querySelector('.almah-prog-fila');
+      if (actual && actual.classList.contains('almah-prog-ok') === programado) continue;
+      actual?.remove();
       const celda = [...row.querySelectorAll('td')].find((td) => td.textContent.includes('\u2014')) || row.lastElementChild;
+      if (programado) {
+        const ok = Object.assign(document.createElement('div'), {
+          className: 'almah-prog-fila almah-prog-ok',
+          textContent: '✔ Programado',
+          title: 'Ya tiene horario (Modelo Dosificación). Para programarlo distinto, elimínalo y agrégalo de nuevo.',
+        });
+        celda.appendChild(ok);
+        continue;
+      }
       const dias = document.createElement('select');
       dias.className = 'almah-select';
       dias.title = 'Duración (Por N días)';
@@ -1808,6 +1823,7 @@
     document.querySelector(SEL.detalleGuardar)?.click();
     if (!(await waitFor(() => pendientes().length, { timeout: 15000 }))) throw new Error('no volvió a la lista');
     await waitFor(() => pendientes().some((r) => textoPendiente(r).includes(op.frecuencia)), { timeout: 8000 });
+    decorarPendientesCuidados();
     toast(`Programado: ${op.titulo}, por ${dias} día${dias > 1 ? 's' : ''} (hasta ${fin}). Revisa y guarda con tu contraseña.`, false, 7000);
   }
 
@@ -3063,6 +3079,9 @@
       margin: 4px 0; background: #f4faf9; border-left: 3px solid #007067; }
     .almah-fila { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
     .almah-prog-fila { margin-top: 4px; }
+    .almah-prog-ok { display: inline-block; font: 600 11px system-ui, sans-serif; color: #fff; background: #1e8e3e;
+      border-radius: 3px; padding: 1px 6px; }
+    tr.almah-programado > td { background: #e6f4ea !important; }
     .almah-select { font: 11px system-ui, sans-serif; color: #00554e; background: #e8f4f3;
       border: 1px solid #007067; border-radius: 4px; padding: 1px 2px; max-width: 160px; cursor: pointer; }
     .almah-examenes-titulo { font: 600 11px system-ui, sans-serif; color: #00554e; margin-right: 2px; }
