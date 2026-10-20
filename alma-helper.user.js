@@ -2533,6 +2533,10 @@
       mkBtn('↗ Ver en ALMA', 'Abrir Evaluación Especialista - Atención Actual', () => {
         win.hidden = true;
         run('Interconsultas', () => interconsultas(actionBtn));
+      }),
+      mkBtn('🩺 Notas', 'Notas de los interconsultores (Registro Clínico → Búsqueda)', () => {
+        win.hidden = true;
+        run('Notas de interconsultores', () => notasDe('interconsultores', actionBtn));
       }));
     cuerpo.append(pie);
   }
