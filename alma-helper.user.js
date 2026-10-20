@@ -164,7 +164,7 @@
         { titulo: 'Cada 12 h (10 y 22)', frecuencia: 'CADA 12 HORAS', horas: ['10:00', '22:00'] },
         { titulo: 'Cada 8 h (14, 22 y 06)', frecuencia: 'CADA 8 HORAS', horas: ['14:00', '22:00', '06:00'] },
         { titulo: 'Cada 6 h (12, 18, 24 y 06)', frecuencia: 'CADA 6 HORAS', horas: ['12:00', '18:00', '00:00', '06:00'] },
-        { titulo: 'Cada 4 h', frecuencia: 'CADA 4 HORAS', horas: ['10:00', '14:00', '18:00', '22:00', '02:00', '06:00'] },
+        { titulo: 'Cada 4 h', frecuencia: 'CADA 4 HORAS', horas: ['08:00', '12:00', '16:00', '20:00', '00:00', '04:00'] },
         { titulo: 'Cada 2 h', frecuencia: 'CADA 2 HORAS',
           horas: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '00:00', '02:00', '04:00', '06:00'] },
       ],
