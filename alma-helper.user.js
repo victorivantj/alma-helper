@@ -32,6 +32,12 @@
       tens: { titulo: 'Notas TENS', texto: 'Técnico', tipos: ['Técnico Nivel Superior', 'Técnico Paramédico'] },
       fono: { titulo: 'Notas de fonoaudiología', texto: 'Fono', tipos: ['Fonoaudiólogo (a)'] },
       terapiaOcupacional: { titulo: 'Notas de terapia ocupacional', texto: 'Terapeuta', tipos: ['Terapeuta Ocupacional'] },
+      // Filtra por médicos y deja solo las filas de ese tipo de entrada ("1. Atención Médico
+      // Interconsultor"): el filtro "Tipo de Entrada" de ALMA no lo ofrece a todos los perfiles
+      interconsultores: {
+        titulo: 'Notas de interconsultores', texto: 'Médico', tipos: ['Médico', 'Médico Cirujano', 'Médico Becado'],
+        tipoEntrada: /interconsultor/i,
+      },
     },
     // Perfil según el "Grupo de Seguridad" del usuario (menú de su nombre, arriba a la
     // derecha). Si contiene "Médico" se muestran las funciones médicas (evolucionar,
@@ -332,6 +338,7 @@
     ],
     atajos: {
       notasMedicas: { alt: true, key: 'n' },
+      notasInterconsultores: { alt: true, key: '4' },
       notasEnfermeria: { alt: true, key: '1' },
       notasKinesiologia: { alt: true, key: '2' },
       notasTens: { alt: true, key: '3' },
@@ -740,8 +747,15 @@
     toast(`Abriendo ${filtro.titulo.toLowerCase()}…`);
     await abrirRegistroClinico(actionBtn);
     await abrirBusqueda();
+    filtroTipoEntrada = null;
+    aplicarFiltroTipoEntrada();
     await aplicarFiltroProfesional(filtro);
-    toast(filasEntradas().length ? `${filtro.titulo} filtradas ✔` : `No hay ${filtro.titulo.toLowerCase()} en este paciente`);
+    if (filtro.tipoEntrada) {
+      filtroTipoEntrada = { re: filtro.tipoEntrada, titulo: filtro.titulo, tuid: paramHash('TUID') };
+      aplicarFiltroTipoEntrada();
+    }
+    const hay = filasEntradas().some((r) => !r.classList.contains('almah-oculto'));
+    toast(hay ? `${filtro.titulo} filtradas ✔` : `No hay ${filtro.titulo.toLowerCase()} en ${filtro.tipoEntrada ? 'esta página' : 'este paciente'}`);
   }
   const notasMedicas = (actionBtn) => notasDe('medicas', actionBtn);
 
@@ -752,6 +766,7 @@
       { valor: 'kinesiologia', texto: '🏃 Kinesiología', tecla: 'k' },
       { valor: 'fono', texto: '🗣️ Fonoaudiología', tecla: 'f' },
       { valor: 'terapiaOcupacional', texto: '🧩 Terapia ocupacional', tecla: 'o' },
+      { valor: 'interconsultores', texto: '🩺 Interconsultores', tecla: 'i' },
     ]);
     if (clave) await notasDe(clave, actionBtn);
   }
@@ -1059,6 +1074,43 @@
   // ---------------------------------------------------------------------------
   const filasEntradas = () =>
     [...document.querySelectorAll(SEL.entradaRow)].filter((r) => /-row-\d+$/.test(r.id));
+
+  // Filtro por tipo de entrada hecho en la página (ver CONFIG.notas.interconsultores): oculta
+  // las filas de otro tipo; se mantiene hasta otra búsqueda del script o el clic en el aviso.
+  let filtroTipoEntrada = null;
+  const tipoDeEntrada = (row) => {
+    const t = row.querySelector(SEL.entradaTexto)?.textContent.replace(/\s+/g, ' ').trim() || '';
+    return t.includes(') -') ? t.split(') -').pop().trim() : '';
+  };
+  function aplicarFiltroTipoEntrada() {
+    const filas = filasEntradas();
+    let ocultas = 0;
+    for (const r of filas) {
+      const ocultar = !!filtroTipoEntrada && !filtroTipoEntrada.re.test(tipoDeEntrada(r));
+      if (ocultar) ocultas++;
+      if (r.classList.contains('almah-oculto') !== ocultar) r.classList.toggle('almah-oculto', ocultar);
+    }
+    const lista = filas[0]?.closest('table');
+    let aviso = document.querySelector('.almah-aviso-tipo');
+    if (!filtroTipoEntrada || !lista) {
+      aviso?.remove();
+      return;
+    }
+    if (!aviso) {
+      aviso = document.createElement('div');
+      aviso.className = 'almah-aviso almah-aviso-tipo';
+      aviso.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        filtroTipoEntrada = null;
+        aplicarFiltroTipoEntrada();
+      });
+    }
+    if (aviso.nextElementSibling !== lista) lista.before(aviso);
+    const visibles = filas.length - ocultas;
+    const txt = `${filtroTipoEntrada.titulo}: ${visibles} de ${filas.length} en esta página · clic para ver todas`;
+    if (aviso.textContent !== txt) aviso.textContent = txt;
+  }
 
   // En la lista, las entradas de hoy muestran la hora ("17:52 …") y las de días
   // anteriores la fecha ("09/10/2026 …").
@@ -2155,7 +2207,7 @@
         bar.append(
           mkBtn('🩹 Notas Enf.', 'Ver las notas de enfermería de este paciente', () =>
             run('Notas de enfermería', () => notasDe('enfermeria', actionBtn))),
-          mkBtn('👥 Notas otros', 'Notas de TENS, kinesiología, fonoaudiología o terapia ocupacional', () =>
+          mkBtn('👥 Notas otros', 'Notas de TENS, kinesiología, fonoaudiología, terapia ocupacional o interconsultores', () =>
             run('Notas otros', () => notasOtros(actionBtn)))
         );
       } else if (!esMedico()) {
@@ -2200,6 +2252,7 @@
     { id: 'cerrarEvolucion', label: '🔒 Cerrar notas', fn: () => cerrarEvolucion() },
     { id: 'notasMedicas', label: '📝 Notas médicas', fn: () => notasMedicas() },
     { id: 'notasOtros', label: '👥 Notas otros', fn: () => notasOtros(), perfil: 'enfermeria' },
+    { id: 'notasInterconsultores', label: '🩺 Notas interconsultores', fn: () => notasDe('interconsultores') },
     { id: 'notasEnfermeria', label: '🩹 Notas de enfermería', fn: () => notasDe('enfermeria'), perfil: ['otro', 'enfermeria'] },
     { id: 'notasKinesiologia', label: '🏃 Notas de kinesiología', fn: () => notasDe('kinesiologia'), perfil: 'otro' },
     { id: 'notasTens', label: '🧑‍⚕️ Notas TENS', fn: () => notasDe('tens'), perfil: 'otro' },
@@ -2855,6 +2908,8 @@
   // Cada función trabaja solo en su pantalla, para no recorrer todo en cada cambio
   function decorarTodo() {
     const h = location.hash;
+    if (filtroTipoEntrada && filtroTipoEntrada.tuid !== paramHash('TUID')) filtroTipoEntrada = null; // otra página/paciente
+    if (filtroTipoEntrada || document.querySelector('.almah-aviso-tipo')) aplicarFiltroTipoEntrada();
     if (h.startsWith('#/Floorplan')) {
       decorarCamas();
       decorarSignosCamas();
@@ -2920,7 +2975,7 @@
       ['🔒 Cerrar notas', `<p><kbd>${t('cerrarEvolucion')}</kbd> Bloquea (candado) tus registros de hoy y de ayer que sigan abiertos (evoluciones, notas, atenciones, valoraciones…), para cualquier profesional. Muestra la lista antes de confirmar; si hay de ambos días, puedes elegir bloquear todos o solo los de un día. Luego ALMA pide su propia confirmación.</p>`],
       perfil === 'enfermeria' && ['📝 Evolución enf y 🛏️ Cuidados enf', `<p><kbd>${t('evolucion')}</kbd> <b>Evolución enf</b> crea (o abre) tu "Evolución Enfermería" de hoy y pega la plantilla de evolución (si la nota ya tiene texto, no la toca). <b>Nunca guarda</b>: revisa y guarda tú. <kbd>${t('cuidadosEnf')}</kbd> <b>Cuidados enf</b> abre la acción «Cuidados de Enfermería» de tu entrada de hoy (si no la tienes, pregunta antes de crear tu Evolución de Enfermería). Reemplaza a Indicaciones en este perfil; ahí, <b>⏰ Inicio 8 AM</b> deja la fecha y hora de inicio de la cabecera a las 8:00 para todo lo que agregues (clic de nuevo para volver a la hora actual). Bajo cada ítem agregado, elige la duración (1 a 5 días) y la frecuencia, y presiona <b>⚙️ Programar</b>: pone prioridad Normal, la frecuencia, «Por N Día(s)» y las horas del Modelo Dosificación (p. ej. cada 12 h a las 18 y 06). No guarda: revisa y guarda con tu contraseña.</p>`],
       ['📝 Notas por profesión', `<p><kbd>${t('notasMedicas')}</kbd> Notas médicas` +
-        (perfil === 'enfermeria' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería (ver) · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: elige TENS, kinesiología, fonoaudiología o terapia ocupacional`
+        (perfil === 'enfermeria' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería (ver) · <kbd>${t('notasOtros')}</kbd> <b>Notas otros</b>: elige TENS, kinesiología, fonoaudiología, terapia ocupacional o interconsultores`
           : perfil === 'otro' ? ` · <kbd>${t('notasEnfermeria')}</kbd> enfermería · <kbd>${t('notasKinesiologia')}</kbd> kinesiología · <kbd>${t('notasTens')}</kbd> TENS` : '') +
         ': abre Registro Clínico → Búsqueda filtrada por tipo de profesional.</p>'],
       perfil !== 'enfermeria' && ['✍️ Indicaciones', `<p><kbd>${t('indicaciones')}</kbd> Abre la página de indicaciones.` +
