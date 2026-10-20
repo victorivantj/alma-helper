@@ -32,11 +32,11 @@
       tens: { titulo: 'Notas TENS', texto: 'Técnico', tipos: ['Técnico Nivel Superior', 'Técnico Paramédico'] },
       fono: { titulo: 'Notas de fonoaudiología', texto: 'Fono', tipos: ['Fonoaudiólogo (a)'] },
       terapiaOcupacional: { titulo: 'Notas de terapia ocupacional', texto: 'Terapeuta', tipos: ['Terapeuta Ocupacional'] },
-      // Filtra por médicos y deja solo las filas de ese tipo de entrada ("1. Atención Médico
-      // Interconsultor"): el filtro "Tipo de Entrada" de ALMA no lo ofrece a todos los perfiles
+      // "1. Atención Médico Interconsultor": el filtro "Tipo de Entrada" de ALMA no ofrece ese
+      // tipo, así que se busca con la palabra clave (en todas las notas, sin filtro de
+      // profesión) y, por si aparece en el texto de otra nota, se dejan solo las de ese tipo
       interconsultores: {
-        titulo: 'Notas de interconsultores', texto: 'Médico', tipos: ['Médico', 'Médico Cirujano', 'Médico Becado'],
-        tipoEntrada: /interconsultor/i,
+        titulo: 'Notas de interconsultores', tipos: [], palabraClave: 'interconsultor', tipoEntrada: /interconsultor/i,
       },
     },
     // Perfil según el "Grupo de Seguridad" del usuario (menú de su nombre, arriba a la
@@ -721,15 +721,26 @@
   let ultimaBusqueda = null;
   const firmaTipos = (tipos) => [...tipos].sort().join('|');
 
+  // Palabras clave que pone el script (se quitan al pedir otro filtro; las del usuario no)
+  const palabrasDelScript = () => Object.values(CONFIG.notas).map((f) => f.palabraClave).filter(Boolean);
+  const palabraClaveActual = () => document.querySelector(SEL.palabraClave)?.value.trim() || '';
+
   async function aplicarFiltroProfesional(filtro) {
     const tuid = paramHash('TUID');
-    const firma = firmaTipos(filtro.tipos);
+    const firma = firmaTipos(filtro.tipos) + (filtro.palabraClave ? `#${filtro.palabraClave}` : '');
+    const firmaActual = () => firmaTipos(chipsTipoProf()) + (palabraClaveActual() ? `#${palabraClaveActual()}` : '');
     if (ultimaBusqueda?.tuid === tuid && ultimaBusqueda.firma === firma &&
-      firmaTipos(chipsTipoProf()) === firma && filasEntradas().length) return;
+      firmaActual() === firma && filasEntradas().length) return;
     await expandirOpcionesBusqueda();
     await quitarChipsAjenos(filtro);
     for (const tipo of filtro.tipos) {
       if (!chipsTipoProf().includes(tipo)) await agregarTipoProf(tipo, filtro.textos?.[tipo] || filtro.texto);
+    }
+    const clave = filtro.palabraClave || (palabrasDelScript().includes(palabraClaveActual()) ? '' : palabraClaveActual());
+    const campoClave = document.querySelector(SEL.palabraClave);
+    if (campoClave && campoClave.value.trim() !== clave) {
+      fijarCampo(campoClave, clave);
+      await sleep(300);
     }
     const primera = filasEntradas()[0];
     document.querySelector(SEL.findButton).click();
@@ -737,7 +748,7 @@
     await waitFor(() => filasEntradas()[0] !== primera, { timeout: 10000 });
     await sleep(800);
     await waitFor(() => filasEntradas().length, { timeout: 3000 });
-    ultimaBusqueda = { tuid, firma: firmaTipos(chipsTipoProf()) };
+    ultimaBusqueda = { tuid, firma: firmaActual() };
   }
   const aplicarFiltroMedico = () => aplicarFiltroProfesional(CONFIG.notas.medicas);
 
