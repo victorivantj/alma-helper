@@ -3300,7 +3300,7 @@
     #almah-ic-flot li.almah-ic-pend .almah-ic-estado { color: #fff; background: #e37400; border-radius: 3px; padding: 0 4px; font-weight: 700; }
     #almah-ic-flot li:not(.almah-ic-pend) { color: #5f6368; }
     #almah-ic-flot .almah-ic-vacio { padding: 10px; color: #5f6368; }
-    #almah-ic-flot .almah-sv-pie { padding: 4px 10px 6px; color: #80868b; font-size: 10px; display: flex; gap: 6px; align-items: center; }
+    #almah-ic-flot .almah-sv-pie { padding: 4px 10px 6px; color: #80868b; font-size: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     #almah-ic-flot .almah-sv-pie .almah-btn { padding: 0 4px; font-size: 10px; }
     #almah-meds-flot { position: fixed; left: 16px; bottom: 0; z-index: 99998; max-width: 420px; min-width: 220px;
       font: 12px/1.35 system-ui, sans-serif; background: #fff; border: 1px solid #007067; border-radius: 8px 8px 0 0;
