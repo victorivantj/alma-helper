@@ -2616,13 +2616,15 @@
   // cambió el paciente de la cama, se vuelven a pedir). La respuesta pesa ~35–135 KB.
   let camasMapa = { contexto: null, t: 0, porCama: new Map(), pidiendo: null };
   function datosCamasMapa({ forzar = false } = {}) {
-    const ctx = paramHash('CONTEXT');
+    // Algunos mapas (p. ej. abiertos desde otro perfil) no llevan CONTEXT en la dirección
+    const ctx = paramHash('CONTEXT') || location.hash.split('?')[0];
     if (!forzar && camasMapa.contexto === ctx && Date.now() - camasMapa.t < CONFIG.signosVitales.mapaMin * 60000) {
       return Promise.resolve(camasMapa.porCama);
     }
-    if (camasMapa.pidiendo?.ctx === ctx) return camasMapa.pidiendo.promesa; // una sola petición a la vez
+    if (camasMapa.pidiendo && camasMapa.pidiendo.ctx === ctx) return camasMapa.pidiendo.promesa; // una sola petición a la vez
     const promesa = postRouter('system.Router.cls?TFLOORPLAN=1',
-      [['TUID', paramHash('TUID')], ['TUID', '0'], ['CONTEXT', ctx], ['Dialog', paramHash('Dialog') || '0']])
+      [['TUID', paramHash('TUID')], ['TUID', '0'], ...(paramHash('CONTEXT') ? [['CONTEXT', paramHash('CONTEXT')]] : []),
+        ['Dialog', paramHash('Dialog') || '0']])
       .then((j) => {
         const porCama = new Map();
         (j.beds || []).forEach((b) => b.patient && porCama.set(String(b.description).trim(), {
