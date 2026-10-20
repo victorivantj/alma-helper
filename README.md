@@ -39,6 +39,7 @@ Para publicar una versión, sube el número en `@version` y en `VERSION`, y haz 
 | 💊 Medicamentos | Alt+M | Resalta cada indicación según el turno en que se solicitó (los turnos cambian a las 8:00 de lunes a viernes y a las 9:00 sábado y domingo): vigente (turno actual), por renovar (turno anterior, aún no indicada de nuevo), terminada o suspendida. |
 | 💊 Fármacos vigentes | — | Ventana flotante en la ficha del paciente con la sección «Fármacos Vigentes» de ALMA, con nombres abreviados por vía (VO, EV, SC, IM) y etiqueta «en espera». Primero la atención actual; las otras atenciones, aparte y plegadas. |
 | 🧪 Laboratorios | Alt+L | Resultados de Laboratorio - Atención Actual. |
+| 📨 Interconsultas | Alt+C | Ventana flotante con las interconsultas de la atención actual (📨 IC en cada cama), sin abrir la página: primero las solicitadas; clic en el nombre abre su detalle; «Ver notas de interconsultores» abre sus notas. |
 | 📄 Documentos | Alt+O | Imágenes y Documentos del Paciente; en la lista, 👁 Ver muestra cada documento en una ventana flotante. |
 | 📈 Signos vitales | Alt+V | Abre Signos Vitales. Sin abrirla: 📈 SV en cada cama muestra la última toma, y la ficha muestra una ventana con las últimas tomas. Aviso si el último control completo tiene más de 2 h (UCI) o 4 h (UTI). |
 | 👁️ Ocultar terminados | Alt+T | Solo en Medicamentos (con interruptor para apagar el resaltado). |
