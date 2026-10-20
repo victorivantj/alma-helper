@@ -1103,7 +1103,7 @@
     }
     const lista = filas[0]?.closest('table');
     let aviso = document.querySelector('.almah-aviso-tipo');
-    if (!filtroTipoEntrada || !lista) {
+    if (!filtroTipoEntrada || !lista || !ocultas) { // sin nada oculto, el aviso sobra
       aviso?.remove();
       return;
     }
@@ -1119,7 +1119,7 @@
     }
     if (aviso.nextElementSibling !== lista) lista.before(aviso);
     const visibles = filas.length - ocultas;
-    const txt = `${filtroTipoEntrada.titulo}: ${visibles} de ${filas.length} en esta página · clic para ver todas`;
+    const txt = `${filtroTipoEntrada.titulo}: ${visibles} de ${filas.length} · ${ocultas} con la palabra en el texto, ocultas · clic para verlas`;
     if (aviso.textContent !== txt) aviso.textContent = txt;
   }
 
