@@ -2407,6 +2407,7 @@
       pendiente: v(f, 'StatusCode') === 'V',
       fecha: v(f, 'StartDate').slice(0, 5),
       local: v(f, 'ReceivLoc'),
+      enlace: f.OrderName?.linkUrl || '', // "Consultation Details" de esa interconsulta
     })).filter((f) => f.texto);
     return [...filas.filter((f) => f.pendiente), ...filas.filter((f) => !f.pendiente)];
   }
@@ -2444,8 +2445,18 @@
         const li = document.createElement('li');
         if (f.pendiente) li.className = 'almah-ic-pend';
         li.title = f.local;
+        const nombre = Object.assign(document.createElement(f.enlace ? 'a' : 'span'), { className: 'almah-ic-nombre', textContent: f.texto });
+        if (f.enlace) {
+          nombre.href = '#';
+          nombre.title = 'Ver el detalle de esta interconsulta';
+          nombre.addEventListener('click', (e) => {
+            e.preventDefault();
+            win.hidden = true;
+            location.hash = `#${f.enlace.replace(/^#/, '')}&Dialog=3`;
+          });
+        }
         li.append(Object.assign(document.createElement('span'), { className: 'almah-ic-fecha', textContent: f.fecha }),
-          Object.assign(document.createElement('span'), { className: 'almah-ic-nombre', textContent: f.texto }),
+          nombre,
           Object.assign(document.createElement('span'), { className: 'almah-ic-estado', textContent: f.estado }));
         ul.append(li);
       }
@@ -3211,7 +3222,9 @@
     #almah-ic-flot ul { list-style: none; margin: 0; padding: 4px 0; max-height: 50vh; overflow-y: auto; color: #222; }
     #almah-ic-flot li { display: flex; gap: 8px; align-items: baseline; padding: 3px 10px; border-bottom: 1px solid #f1f3f4; }
     #almah-ic-flot .almah-ic-fecha { color: #80868b; font-size: 11px; flex: none; }
-    #almah-ic-flot .almah-ic-nombre { flex: 1; }
+    #almah-ic-flot .almah-ic-nombre { flex: 1; color: inherit; }
+    #almah-ic-flot a.almah-ic-nombre { color: #00554e; text-decoration: none; cursor: pointer; }
+    #almah-ic-flot a.almah-ic-nombre:hover { text-decoration: underline; }
     #almah-ic-flot .almah-ic-estado { flex: none; font-size: 10.5px; color: #5f6368; }
     #almah-ic-flot li.almah-ic-pend .almah-ic-estado { color: #fff; background: #e37400; border-radius: 3px; padding: 0 4px; font-weight: 700; }
     #almah-ic-flot li:not(.almah-ic-pend) { color: #5f6368; }
